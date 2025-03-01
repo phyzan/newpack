@@ -4,6 +4,7 @@
 #include <array>
 #include <string>
 #include "tools.hpp"
+#include <limits>
 
 
 template<class Tt, class Ty, bool raw_ode, bool raw_event>
@@ -30,6 +31,10 @@ public:
     const Tt event_tol;
 
     const size_t n; //size of ode system
+
+    const Tt MAX_FACTOR = Tt(10);
+    const Tt SAFETY = Tt(9)/10;
+    const Tt MIN_FACTOR = Tt(2)/10;
 
 private:
 
@@ -173,32 +178,32 @@ bool OdeSolver<Tt, Ty, raw_ode, raw_event>::_update(const Tt& t_new, const Ty& y
         throw std::runtime_error("Wrong direction of integration");
     }
 
-    if (h_next <= h_min){
-        _is_stiff = true;
+    if (!All_isFinite(y_new)){
         kill();
-        _message = "Ode very stiff";
-        success = false;
-    }
-    else if (!All_isFinite(y_new)){
         _diverges = true;
-        kill();
         _message = "Ode solution diverges";
         success = false;
     }
+    else if (h_next <= h_min){
+        kill();
+        _is_stiff = true;
+        _message = "Ode very stiff";
+        success = false;
+    }
     else if (t_new*direction >= _tmax*direction){
+        stop();
         _q = this->step(_t, _q, _tmax-_t);
         _t = _tmax;
         _habs = h_next;
-        _N++;
-        stop();
         _message = "T_max goal reached";
+        _N++;
     }
     else{
         _t = t_new;
         _q = y_new;
         _habs = h_next;
-        _N++;
         _message = "Alive";
+        _N++;
     }
 
     return success;

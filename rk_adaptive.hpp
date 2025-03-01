@@ -30,10 +30,6 @@ public:
     using Btype = B_matrix<Tt, Norder, Nstages>;
     using Ctype = C_matrix<Tt, Norder, Nstages>;
     using Etype = E_matrix<Tt, Norder, Nstages>;
-    
-    const Tt MAX_FACTOR = Tt(10);
-    const Tt SAFETY = Tt(9)/10;
-    const Tt MIN_FACTOR = Tt(2)/10;
 
     virtual Atype Amatrix() const = 0;
     virtual Btype Bmatrix() const = 0;
@@ -47,16 +43,14 @@ public:
     State<Tt, Ty> adaptive_step() const override {
         const Ty& qabs = cwise_abs(this->q);
         Tt habs = this->stepsize;
-        Tt h;
-        Tt t_new;
-        Ty q_new;
-        Tt err_norm;
-        Ty scale;
-        Tt factor;
+        Tt h, t_new, err_norm, factor, _factor;
+        Ty q_new, scale;
 
         bool step_accepted = false;
         bool step_rejected = false;
-        
+
+
+
         while (!step_accepted){
 
             h = habs * this->direction;
@@ -65,18 +59,22 @@ public:
             q_new = step(this->t, this->q, h);
             scale = this->atol + cwise_max(qabs, cwise_abs(q_new))*this->rtol;
             err_norm = _error_norm(_K, h, scale);
+            _factor = this->SAFETY*std::pow(err_norm, err_exp);
             if (err_norm < 1){
-                factor = (err_norm == 0) ? this->MAX_FACTOR : std::min(this->MAX_FACTOR, this->SAFETY*std::pow(err_norm, err_exp));
+                factor = (err_norm == 0) ? this->MAX_FACTOR : std::min(this->MAX_FACTOR, _factor);
                 if (step_rejected){
                     factor = factor < 1 ? factor : 1;
                 }
                 step_accepted = true;
             }
             else {
-                factor = std::max(this->MIN_FACTOR, this->SAFETY*std::pow(err_norm, err_exp));
+                factor = std::max(this->MIN_FACTOR, _factor);
                 step_rejected = true;
             }
             habs *= factor;
+            if (habs == 0){
+                break;
+            }
         }
 
         return {t_new, q_new,  habs};
@@ -93,8 +91,7 @@ protected:
 
 private:
 
-    const int err_est_ord = Norder-1;
-    const Tt err_exp = Tt(-1.)/Tt(Norder*1.);
+    const Tt err_exp = Tt(-1)/Tt(Norder);
     mutable StageContainer _K;//always holds the value given to it by the last "step" call
 
 
@@ -152,7 +149,7 @@ class RK45 : public RungeKutta<Tt, Ty, 6, 5, raw_ode, raw_event>{
     
 
 public:
-    RK45(const SolverArgs<Tt, Ty, raw_ode, raw_event>& S) : RungeKutta<Tt, Ty, Nstages, Norder, raw_ode, raw_event>(S, Amatrix(), Bmatrix(), Cmatrix(), Ematrix()){}
+    RK45(const SolverArgs<Tt, Ty, raw_ode, raw_event>& S) : RKbase(S, Amatrix(), Bmatrix(), Cmatrix(), Ematrix()){}
 
     RKbase::Atype Amatrix() const override{
         typename RKbase::Atype A;
@@ -212,7 +209,7 @@ class RK23 : public RungeKutta<Tt, Ty, 3, 3, raw_ode, raw_event> {
     using RKbase = RungeKutta<Tt, Ty, Nstages, Norder, raw_ode, raw_event>;
     
 public:
-    RK23(const SolverArgs<Tt, Ty, raw_ode, raw_event>& S) : RungeKutta<Tt, Ty, Nstages, Norder, raw_ode, raw_event>(S, Amatrix(), Bmatrix(), Cmatrix(), Ematrix()){}
+    RK23(const SolverArgs<Tt, Ty, raw_ode, raw_event>& S) : RKbase(S, Amatrix(), Bmatrix(), Cmatrix(), Ematrix()){}
 
     RKbase::Atype Amatrix() const override{
         typename RKbase::Atype A;

@@ -4,6 +4,7 @@
 #include <variant>
 #include <span>
 #include "rk_adaptive.hpp"
+#include "rk_classic.hpp"
 #include <unordered_map>
 #include <chrono>
 #include <omp.h>
@@ -19,6 +20,9 @@ OdeSolver<Tt, Ty, raw_ode, raw_event>* getSolver(const SolverArgs<Tt, Ty, raw_od
     }
     else if (method == "RK45") {
         solver = new RK45<Tt, Ty, raw_ode, raw_event>(S);
+    }
+    else if (method == "RK4") {
+        solver = new RK4<Tt, Ty, raw_ode, raw_event>(S);
     }
     else {
         throw std::runtime_error("Unknown solver method");
@@ -56,6 +60,8 @@ public:
         return res;
 
     }
+
+    SolverState<Tt, Ty> advance();
 
     const std::vector<Tt>& t = _t_arr;
     const std::vector<Ty>& q = _q_arr;
@@ -138,6 +144,17 @@ const OdeResultReference<Tt, Ty> ODE<Tt, Ty, raw_ode, raw_event>::integrate(cons
 
     _runtime += res.runtime;
     return res;
+}
+
+
+template<class Tt, class Ty, bool raw_ode, bool raw_event>
+SolverState<Tt, Ty> ODE<Tt, Ty, raw_ode, raw_event>::advance(){
+    if (!_solver->is_running()){
+        _solver->set_goal(std::numeric_limits<Tt>::infinity());
+    }
+    _solver->advance();
+    _solver->set_goal(_solver->t);
+    return _solver->state();
 }
 
 
