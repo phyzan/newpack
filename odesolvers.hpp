@@ -29,7 +29,6 @@ public:
     const is_event_f<Tt, Ty> check_mask;
     const Tt event_tol;
 
-    const int direction;
     const size_t n; //size of ode system
 
 private:
@@ -47,6 +46,7 @@ private:
     bool _is_dead = false;
     size_t neval=0;//total number of solution updates
     std::string _message = "Alive"; //different from "running".
+    int _direction;
 
 
 public:
@@ -61,10 +61,11 @@ public:
     void set_goal(const Tt& t_max);
 
     //ACCESSORS
-    const Tt& t_now() const {return _t;}
-    const Ty& q_now() const {return _q;}
-    const Tt& habs_next() const {return _habs;}
-    const Tt& t_goal() const {return _tmax;}
+    const Tt& t = _t;
+    const Ty& q = _q;
+    const Tt& stepsize = _habs;
+    const Tt& tmax = _tmax;
+    const int& direction = _direction;
     const bool& at_event() const {return _event;}
     const bool& at_transform_event() const {return _transform_event;}
     const bool& diverges() const {return _diverges;}
@@ -87,7 +88,9 @@ public:
 
 protected:
 
-    OdeSolver(const SolverArgs<Tt, Ty, raw_ode, raw_event>& S): f(S.f), rtol(S.rtol), atol(S.atol), h_min(S.h_min), args(S.args), event(S.event), stopevent(S.stopevent), check_event(S.check_event), check_stop(S.check_stop), fmask(S.fmask), maskevent(S.maskevent), check_mask(S.check_mask), event_tol(S.event_tol), direction(S.tmax > S.t0 ? 1 : -1), n(S.q0.size()), _t(S.t0), _q(S.q0), _habs(S.habs), _tmax(S.tmax) {}
+    OdeSolver(const SolverArgs<Tt, Ty, raw_ode, raw_event>& S): f(S.f), rtol(S.rtol), atol(S.atol), h_min(S.h_min), args(S.args), event(S.event), stopevent(S.stopevent), check_event(S.check_event), check_stop(S.check_stop), fmask(S.fmask), maskevent(S.maskevent), check_mask(S.check_mask), event_tol(S.event_tol), n(S.q0.size()), _t(S.t0), _q(S.q0), _habs(S.habs) {
+        set_goal(S.tmax);
+    }
 
 
 private:
@@ -124,12 +127,15 @@ void OdeSolver<Tt, Ty, raw_ode, raw_event>::set_goal(const Tt& t_max_new){
     if (_is_dead){
         _warn_dead();
     }
-    else if ( (t_max_new - _t)*direction <= 0){
-        throw std::runtime_error("Cannot set t_max goal to value " + std::to_string(t_max_new));
+    else if (t_max_new == _t){
+        _direction = 0;
+        _tmax = t_max_new;
+        stop("Direction not provided");
     }
     else{
         _tmax = t_max_new;
         _is_running = true;
+        _direction = ( t_max_new > _t) ? 1 : -1;
     }
 }
 

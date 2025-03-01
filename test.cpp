@@ -11,7 +11,7 @@ Tt fevent(const Tt& t, const Tf& f, const std::vector<Tt>& args){
     return f[1]-1;
 }
 
-bool check_event(const Tt& t, const Tf& f, const std::vector<Tt>& args){
+bool check_fevent(const Tt& t, const Tf& f, const std::vector<Tt>& args){
     return f[3]>0;
 }
 
@@ -22,9 +22,9 @@ int main(){
     double t_max = 10001*pi/2;
     Tf q0 = {1, 1, 2.3, 4.5};
 
-    SolverArgs<Tt, Tf, true, true> S = {f, 0., 1000, q0, 1e-3, 0., 1e-15, 1e-6, {}, fevent, nullptr, check_event, nullptr, nullptr, nullptr, nullptr, 1e-12};
+    // SolverArgs<Tt, Tf, true, true> S = {f, 0., 1000, q0, 1e-3, 0., 1e-8, 0., {}, fevent, nullptr, check_fevent, nullptr, nullptr, nullptr, nullptr, 1e-12};
 
-    ODE<Tt, Tf> ode({S, "RK23"});
+    ODE<Tt, Tf> ode(f, 0, q0, 1e-3, 1e-5, 1e-10, 0., {}, "RK23", 1e-10, fevent, nullptr, check_fevent);
     // ode.integrate(t_max/2, -1, 20, false);
     // ode.integrate(t_max/2, -1, 20, false);
     OdeResult<Tt, Tf> res = ode.integrate(t_max, 10, 20, false);

@@ -45,10 +45,8 @@ public:
     }
 
     State<Tt, Ty> adaptive_step() const override {
-        const Tt& t = this->t_now();
-        const Ty& q = this->q_now();
-        const Ty& qabs = cwise_abs(q);
-        Tt habs = this->habs_next();
+        const Ty& qabs = cwise_abs(this->q);
+        Tt habs = this->stepsize;
         Tt h;
         Tt t_new;
         Ty q_new;
@@ -62,9 +60,9 @@ public:
         while (!step_accepted){
 
             h = habs * this->direction;
-            t_new = t+h;
+            t_new = this->t+h;
 
-            q_new = step(t, q, h); 
+            q_new = step(this->t, this->q, h); 
             scale = this->atol + cwise_max(qabs, cwise_abs(q_new))*this->rtol;
             err_norm = _error_norm(_K, h, scale);
             if (err_norm < 1){

@@ -148,30 +148,30 @@ struct OdeResult{
 template<class Tt, class Ty>
 struct SolverState{
 
-    Tt t;
-    Ty q;
-    Tt habs;
-    bool event;
-    bool transform_event;
-    bool diverges;
-    bool is_stiff;
-    bool is_running; //if tmax or breakcond are met or is dead, it is set to false. It can be set to true if new tmax goal is set
-    bool is_dead; //e.g. if stiff or diverges. This is irreversible.
-    size_t neval;
-    std::string message;
+    const Tt t;
+    const Ty q;
+    const Tt habs;
+    const bool event;
+    const bool transform_event;
+    const bool diverges;
+    const bool is_stiff;
+    const bool is_running; //if tmax or breakcond are met or is dead, it is set to false. It can be set to true if new tmax goal is set
+    const bool is_dead; //e.g. if stiff or diverges. This is irreversible.
+    const size_t N;
+    const std::string message;
 
     void show(const int& precision = 15) const{
         std::cout << std::endl << std::setprecision(precision) <<
         "t          : " << t << "\n" <<
         "q          : " << q.transpose() << "\n" <<
         "h          : " << habs << "\n" <<
-        "event      : " << (event ? "true" : "false") << "\n" <<
-        "transformed: " << (transform_event ? "true" : "false") << "\n"
-        "diverges   : " << (diverges ? "true" : "false") << "\n" << 
-        "stiff      : " << (is_stiff ? "true" : "false") << "\n" <<
-        "running    : " << (is_running ? "true" : "false") << "\n" <<
-        "dead       : " << (is_dead ? "true" : "false") << "\n" <<
-        "Updates    : " << neval << "\n" <<
+        "Event      : " << (event ? "true" : "false") << "\n" <<
+        "Transformed: " << (transform_event ? "true" : "false") << "\n"
+        "Diverges   : " << (diverges ? "true" : "false") << "\n" << 
+        "Stiff      : " << (is_stiff ? "true" : "false") << "\n" <<
+        "Running    : " << (is_running ? "true" : "false") << "\n" <<
+        "Updates    : " << N << "\n" <<
+        "Dead       : " << (is_dead ? "true" : "false") << "\n" <<
         "State      : " << message << "\n";
     }
 
@@ -207,14 +207,6 @@ struct SolverArgs{
     const event_f<Tt, Ty> maskevent;
     const is_event_f<Tt, Ty> check_mask;
     const Tt event_tol;
-};
-
-
-template<class Tt, class Ty, bool raw_ode, bool raw_event>
-struct OdeArgs{
-
-    SolverArgs<Tt, Ty, raw_ode, raw_event> S;
-    std::string method;
 };
 
 
