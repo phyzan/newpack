@@ -2,6 +2,7 @@
 #define ODE_HPP
 
 #include <variant>
+#include <span>
 #include "rk_adaptive.hpp"
 #include <unordered_map>
 #include <chrono>
@@ -41,16 +42,26 @@ public:
 
     ~ODE(){delete _solver;}
 
-    const OdeResult<Tt, Ty> integrate(const Tt& interval, const int& max_frames=-1, const int& max_events=-1, const bool& terminate = true, const bool& display = false);
+    const OdeResultReference<Tt, Ty> integrate(const Tt& interval, const int& max_frames=-1, const int& max_events=-1, const bool& terminate = true, const bool& display = false);
 
     const SolverState<Tt, Ty> state() const {return _solver->state();}
+
+    const std::vector<size_t> _recent(const std::vector<size_t>& event_list, const size_t& begin, const size_t& Tbegin) const{
+
+        const size_t N = event_list.size()-begin;
+        std::vector<size_t> res(N);
+        for (size_t i=0; i<N; i++){
+            res[i] = event_list[begin+i]-Tbegin;
+        }
+        return res;
+
+    }
 
     const std::vector<Tt>& t = _t_arr;
     const std::vector<Ty>& q = _q_arr;
     const std::vector<size_t>& events = _events;
     const std::vector<size_t>& transforms = _transforms;
     const long double& runtime = _runtime;
-
 
 private:
 
@@ -63,6 +74,10 @@ private:
 };
 
 
+
+
+
+
 /*
 -----------------------------------------------------------------------
 -----------------------------IMPLEMENTATIONS-------------------------------
@@ -71,7 +86,7 @@ private:
 
 
 template<class Tt, class Ty, bool raw_ode, bool raw_event>
-const OdeResult<Tt, Ty> ODE<Tt, Ty, raw_ode, raw_event>::integrate(const Tt& interval, const int& max_frames, const int& max_events, const bool& terminate, const bool& display){
+const OdeResultReference<Tt, Ty> ODE<Tt, Ty, raw_ode, raw_event>::integrate(const Tt& interval, const int& max_frames, const int& max_events, const bool& terminate, const bool& display){
 
     if (interval <= 0){
         throw std::runtime_error("Enter a positive interval");
@@ -103,7 +118,7 @@ const OdeResult<Tt, Ty> ODE<Tt, Ty, raw_ode, raw_event>::integrate(const Tt& int
                 }
                 ++i;
             }
-            else if ( (max_frames == -1) || (abs(_t-t0)*max_frames > frame_counter*interval) ){
+            else if ( (max_frames == -1) || (abs(_t-t0)*max_frames >= (frame_counter+1)*interval) ){
                 _t_arr.push_back(_t);
                 _q_arr.push_back(_q);
                 if (_solver->at_transform_event() && _solver->maskevent != nullptr){
@@ -115,14 +130,12 @@ const OdeResult<Tt, Ty> ODE<Tt, Ty, raw_ode, raw_event>::integrate(const Tt& int
         }
     }
 
-    OdeResult<Tt, Ty> res = {subvector(_t_arr, N), subvector(_q_arr, N), vec_add(subvector(_events, Nevents), -N), vec_add(subvector(_transforms, Ntransfomrs), -N), _solver->diverges(), _solver->is_stiff(), !_solver->is_dead(), 0, _solver->message()};
-
     auto t2 = std::chrono::high_resolution_clock::now();
     
-
     std::chrono::duration<long double> rt = t2-t1;
 
-    res.runtime = rt.count();
+    OdeResultReference<Tt, Ty> res = {std::span<Tt>(_t_arr).subspan(N), std::span<Ty>(_q_arr).subspan(N), _recent(_events, Nevents, N), _recent(_transforms, Ntransfomrs, N), _solver->diverges(), _solver->is_stiff(), !_solver->is_dead(), rt.count(), _solver->message()};
+
     _runtime += res.runtime;
     return res;
 }

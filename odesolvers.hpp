@@ -44,7 +44,7 @@ private:
     bool _is_stiff = false;
     bool _is_running = true;
     bool _is_dead = false;
-    size_t neval=0;//total number of solution updates
+    size_t _N=0;//total number of solution updates
     std::string _message = "Alive"; //different from "running".
     int _direction;
 
@@ -74,7 +74,7 @@ public:
     const bool& is_dead() const {return _is_dead;}
     const std::string& message() {return _message;}
     const SolverState<Tt, Ty> state() const {
-        return {_t, _q, _habs, _event, _transform_event, _diverges, _is_stiff, _is_running, _is_dead, neval, _message};
+        return {_t, _q, _habs, _event, _transform_event, _diverges, _is_stiff, _is_running, _is_dead, _N, _message};
     }
 
     //MEMBER FUNCTIONS BELOW IMPLEMENTED BY CUSTOM DERIVED CLASSES
@@ -189,7 +189,7 @@ bool OdeSolver<Tt, Ty, raw_ode, raw_event>::_update(const Tt& t_new, const Ty& y
         _q = this->step(_t, _q, _tmax-_t);
         _t = _tmax;
         _habs = h_next;
-        neval++;
+        _N++;
         stop();
         _message = "T_max goal reached";
     }
@@ -197,7 +197,7 @@ bool OdeSolver<Tt, Ty, raw_ode, raw_event>::_update(const Tt& t_new, const Ty& y
         _t = t_new;
         _q = y_new;
         _habs = h_next;
-        neval++;
+        _N++;
         _message = "Alive";
     }
 
@@ -245,7 +245,7 @@ bool OdeSolver<Tt, Ty, raw_ode, raw_event>::_go_to_state(State<Tt, Ty>& next){
     }
 
 
-    if (neval > 0){
+    if (_N > 0){
         if (_adapt_to_event<raw_event>(next, stopevent, check_stop)){
             bool success = _update(next.t, next.q, next.h_next);
             stop();

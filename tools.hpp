@@ -117,18 +117,20 @@ std::vector<T> bisect(Callable&& f, const T& a, const T& b, const T& atol){
 
 //ODERESULT STRUCT TO ENCAPSULATE THE RESULT OF AN ODE INTEGRATION
 
-template<class Tt, class Ty>
-struct OdeResult{
+template<class Tt, class Ty, template <class> class Container>
+class _OdeResult{
 
-    const std::vector<Tt> t;
-    const std::vector<Ty> q;
+public:
+
+    const Container<Tt> t;
+    const Container<Ty> q;
     const std::vector<size_t> events;
-    std::vector<size_t> transforms;
-    bool diverges;
-    bool is_stiff;
-    bool success;// if t_max or break condition were satisfied
-    long double runtime;
-    std::string message;
+    const std::vector<size_t> transforms;
+    const bool diverges;
+    const bool is_stiff;
+    const bool success;// if t_max or break condition were satisfied
+    const long double runtime;
+    const std::string message;
 
     void examine() const{
         std::cout << std::endl <<
@@ -141,8 +143,22 @@ struct OdeResult{
         "Runtime          : " << runtime << "\n" <<
         "Termination cause: " << message << "\n";
     }
+    
 };
 
+template<class Tt, class Ty>
+using OdeResult = _OdeResult<Tt, Ty, std::vector>;
+
+template<class Tt, class Ty>
+class OdeResultReference : public _OdeResult<Tt, Ty, std::span> {
+
+public:
+    OdeResult<Tt, Ty> as_copy() const{
+        return {std::vector<Tt>(this->t.begin(), this->t.end()),
+                std::vector<Ty>(this->q.begin(), this->q.end()),
+                this->events, this->transforms, this->diverges, this->is_stiff, this->success, this->runtime, this->message};
+    }
+};
 
 
 template<class Tt, class Ty>
@@ -208,29 +224,6 @@ struct SolverArgs{
     const is_event_f<Tt, Ty> check_mask;
     const Tt event_tol;
 };
-
-
-template<class T>
-std::vector<T> subvector(const std::vector<T>& a, const size_t& begin){
-    size_t N = a.size();
-    size_t Nsub = N - begin;
-
-    std::vector<T> res(Nsub);
-    for (size_t i=0; i<Nsub; i++){
-        res[i] = a[begin+i];
-    }
-    return res;
-}
-
-template<class T>
-std::vector<T> vec_add(const std::vector<T>& a, const T& q){
-    std::vector<T> res = a;
-    for (size_t i=0; i<a.size(); i++){
-        res[i] += q;
-    }
-    return res;
-}
-
 
 
 #endif

@@ -62,7 +62,7 @@ public:
             h = habs * this->direction;
             t_new = this->t+h;
 
-            q_new = step(this->t, this->q, h); 
+            q_new = step(this->t, this->q, h);
             scale = this->atol + cwise_max(qabs, cwise_abs(q_new))*this->rtol;
             err_norm = _error_norm(_K, h, scale);
             if (err_norm < 1){
@@ -77,9 +77,6 @@ public:
                 step_rejected = true;
             }
             habs *= factor;
-            if (habs == 0.){
-                break;
-            }
         }
 
         return {t_new, q_new,  habs};
