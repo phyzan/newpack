@@ -174,6 +174,14 @@ private:
     ODE<Tt, Ty, false, false> ode;
     std::vector<size_t> _shape;
 
+    std::vector<size_t> fullshape() {
+        std::vector<size_t> result;
+        result.reserve(1 + _shape.size()); // Pre-allocate memory for efficiency
+        result.push_back(ode.t.size());        // Add the first element
+        result.insert(result.end(), _shape.begin(), _shape.end()); // Append the original vector
+        return result;
+    }
+
 public:
 
     PyODE(const py::object f, const Tt& t0, const py::array& q0, const Tt& stepsize, const Tt& rtol, const Tt& atol, const Tt& min_step, const py::tuple& args, const py::str& method, const Tt& event_tol, const py::object event, const py::object stopevent, const py::object check_event, const py::object check_stop, const py::object fmask, const py::object maskevent, const py::object check_mask) : ode(PyOdeArgs<Tt, Ty>{f, t0, q0, stepsize, rtol, atol, min_step, args, method, event_tol, event, stopevent, check_event, check_stop, fmask, maskevent, check_mask}.to_ODE()), _shape(shape(q0)) {}
@@ -193,7 +201,7 @@ public:
     }
 
     const py::array_t<Tt> t(){return to_numpy<Tt>(ode.t);}
-    const py::array_t<Tt> q(){return to_numpy<Tt>(flatten<Tt, Ty>(ode.q), {ode.q.size(), ode.q[0].size()});}
+    const py::array_t<Tt> q(){return to_numpy<Tt>(flatten<Tt, Ty>(ode.q), fullshape());}
     const py::array_t<size_t> events(){return to_numpy<size_t>(ode.events);}
     const py::array_t<size_t> transforms(){return to_numpy<size_t>(ode.transforms);}
     const long double runtime(){return ode.runtime;}
