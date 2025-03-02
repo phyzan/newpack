@@ -44,6 +44,12 @@ public:
         _q_arr.push_back(S.q0);
     }
 
+    ODE(const SolverArgs<Tt, Ty, raw_ode, raw_event>& S, const std::string& method){
+        _solver = getSolver(S, method);
+        _t_arr.push_back(S.t0);
+        _q_arr.push_back(S.q0);
+    }
+
     ~ODE(){delete _solver;}
 
     const OdeResultReference<Tt, Ty> integrate(const Tt& interval, const int& max_frames=-1, const int& max_events=-1, const bool& terminate = true, const bool& display = false);
@@ -93,10 +99,7 @@ private:
 
 template<class Tt, class Ty, bool raw_ode, bool raw_event>
 const OdeResultReference<Tt, Ty> ODE<Tt, Ty, raw_ode, raw_event>::integrate(const Tt& interval, const int& max_frames, const int& max_events, const bool& terminate, const bool& display){
-
-    if (interval <= 0){
-        throw std::runtime_error("Enter a positive interval");
-    }
+    
     auto t1 = std::chrono::high_resolution_clock::now();
 
     const Tt t0 = _solver->t;
@@ -115,7 +118,7 @@ const OdeResultReference<Tt, Ty> ODE<Tt, Ty, raw_ode, raw_event>::integrate(cons
         if (_solver->advance()){
             _t = _solver->t;
             _q = _solver->q;
-            if (_solver->at_event() && event_counter < max_events){
+            if (_solver->at_event() && event_counter != max_events){
                 _events.push_back(i);
                 _t_arr.push_back(_t);
                 _q_arr.push_back(_q);
@@ -153,6 +156,16 @@ SolverState<Tt, Ty> ODE<Tt, Ty, raw_ode, raw_event>::advance(){
         _solver->set_goal(std::numeric_limits<Tt>::infinity());
     }
     _solver->advance();
+    _t_arr.push_back(_solver->t);
+    _q_arr.push_back(_solver->q);
+    size_t i = _t_arr.size()-1;
+    if (_solver->at_event()){
+        _events.push_back(i);
+    }
+    else if (_solver->at_transform_event() && _solver->maskevent != nullptr){
+        _transforms.push_back(i);
+    }
+    
     _solver->set_goal(_solver->t);
     return _solver->state();
 }

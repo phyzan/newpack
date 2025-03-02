@@ -9,8 +9,8 @@
 
 // USEFUL ALIASES
 
-template<class Tt, size_t Nr=0, size_t Nc=1>
-using vec = std::conditional_t<(Nr == 0), Eigen::Array<Tt, Eigen::Dynamic, Nc>, Eigen::Array<Tt, Nr, Nc>>;
+template<class Tt, size_t Nc=0, size_t Nr=1>
+using vec = std::conditional_t<(Nc == 0), Eigen::Array<Tt, Nr, -1>, Eigen::Array<Tt, Nr, Nc>>;
 
 template<class Tt, class Ty>
 using ode = Ty(*)(const Tt&, const Ty&, const std::vector<Tt>&);
@@ -74,12 +74,12 @@ bool All_isFinite(const Eigen::Array<T, Nr, Nc>& arr){
 }
 
 template<class T, int Nr, int Nc>
-std::vector<int> shape(const Eigen::Array<T, Nr, Nc>& arr){
+std::vector<size_t> shape(const Eigen::Array<T, Nr, Nc>& arr){
     return {arr.rows(), arr.cols()};
 }
 
 template<class T>
-std::vector<int> shape(const std::vector<T>& arr){
+std::vector<size_t> shape(const std::vector<T>& arr){
     return {arr.size()};
 }
 
@@ -87,7 +87,7 @@ std::vector<int> shape(const std::vector<T>& arr){
 
 template<class T, typename Callable>
 std::vector<T> bisect(Callable&& f, const T& a, const T& b, const T& atol){
-    T err = 2*atol;
+    T err = 2*atol+1;
     T _a = a;
     T _b = b;
     T c = a;
@@ -179,7 +179,7 @@ struct SolverState{
     void show(const int& precision = 15) const{
         std::cout << std::endl << std::setprecision(precision) <<
         "t          : " << t << "\n" <<
-        "q          : " << q.transpose() << "\n" <<
+        "q          : " << q << "\n" <<
         "h          : " << habs << "\n" <<
         "Event      : " << (event ? "true" : "false") << "\n" <<
         "Transformed: " << (transform_event ? "true" : "false") << "\n"
