@@ -3,49 +3,25 @@
 
 #include <vector>
 #include <iostream>
+#include <map>
 #include <iomanip>
 #include <eigen3/Eigen/Dense>
 
 
 // USEFUL ALIASES
 
-template<class Tt, size_t Nc=0, size_t Nr=1>
-using vec = std::conditional_t<(Nc == 0), Eigen::Array<Tt, Nr, -1>, Eigen::Array<Tt, Nr, Nc>>;
+template<class Tt, int N>
+using vec = Eigen::Array<Tt, 1, N>;
 
 template<class Tt, class Ty>
-using ode = Ty(*)(const Tt&, const Ty&, const std::vector<Tt>&);
-
-template<class Tt, class Ty>
-using ode_f = std::function<Ty(const Tt&, const Ty&, const std::vector<Tt>&)>;
-
-template<class Tt, class Ty, bool raw>
-using ode_t = std::conditional_t<(raw==true), ode<Tt, Ty>, ode_f<Tt, Ty>>;
-
-
-
-template<class Tt, class Ty>
-using event = Tt(*)(const Tt&, const Ty&, const std::vector<Tt>&);
+using Func = std::function<Ty(const Tt&, const Ty&, const std::vector<Tt>&)>;
 
 template<class Tt, class Ty>
 using event_f = std::function<Tt(const Tt&, const Ty&, const std::vector<Tt>&)>;
 
-template<class Tt, class Ty, bool raw>
-using event_t = std::conditional_t<(raw==true), event<Tt, Ty>, event_f<Tt, Ty>>;
-
-
-template<class Tt, class Ty>
-using is_event = bool(*)(const Tt&, const Ty&, const std::vector<Tt>&);
-
 template<class Tt, class Ty>
 using is_event_f = std::function<bool(const Tt&, const Ty&, const std::vector<Tt>&)>;
 
-template<class Tt, class Ty, bool raw>
-using is_event_t = std::conditional_t<(raw==true), is_event<Tt, Ty>, is_event_f<Tt, Ty>>;
-
-
-
-template<class Tt, class Ty>
-using mask = ode_f<Tt, Ty>; //mask function is of the same form as the ode: f(t, y) -> y_new
 
 
 template<class T, int Nr, int Nc>
@@ -114,6 +90,167 @@ std::vector<T> bisect(Callable&& f, const T& a, const T& b, const T& atol){
     return {_a, c, _b};
 }
 
+template<class Tt, class Ty>
+class Event{
+
+public:
+    Event(const std::string& name, event_f<Tt, Ty> when, is_event_f<Tt, Ty> check_if=nullptr, Func<Tt, Ty> mask=nullptr) : _name(name), _when(when), _check_if(check_if), _mask(mask) {}
+
+    Event(const std::string& name, std::vector<Tt> when, is_event_f<Tt, Ty> check_if=nullptr, Func<Tt, Ty> mask=nullptr) : _name(name), _when_t(when), _check_if(check_if), _mask(mask) {}
+
+    bool determine(const Tt& t1, const Tt& t2, const std::vector<Tt>& args, std::function<Ty(const Tt&)> q, const Tt& tol){
+        delete _t_event;
+        delete _q_event;
+        _t_event = nullptr;
+        _q_event = nullptr;
+        if (_when != nullptr){
+            std::function<Tt(Tt)> obj_fun = [this, q, args](const Tt& t) ->Tt {
+                return _when(t, q(t), args);
+            };
+
+            if (_check_if == nullptr || (_check_if(t1, q(t1), args) && _check_if(t2, q(t2), args))){
+                if (_when(t1, q(t1), args) * _when(t2, q(t2), args) <= 0){
+
+                    _t_event = new Tt;
+                    _q_event = new Ty;
+                    *_t_event = bisect(obj_fun, t1, t2, tol)[2];
+                    *_q_event = (_mask == nullptr) ? q(*_t_event) : _mask(*_t_event, q(*_t_event), args);
+                    return true;
+                }
+            }
+        }
+        else if ( (t1 <= _when_t[_i]) && (_when_t[_i] <= t2)){
+            _t_event = new Tt;
+            _q_event = new Ty;
+            *_t_event = _when_t[_i++];
+            *_q_event = (_mask == nullptr) ? q(*_t_event) : _mask(*_t_event, q(*_t_event), args);
+            return true;
+        }
+        return false;
+    }
+
+    const Tt& t_event(){
+        return *_t_event;
+    }
+
+    const Ty& q_event(){
+        return *_q_event;
+    }
+
+    const std::string& name = _name;
+
+    ~Event(){
+        delete _t_event;
+        delete _q_event;
+    }
+
+
+private:
+
+    const std::string _name;
+    const std::vector<Tt> _when_t = {};
+    const event_f<Tt, Ty> _when;
+    const is_event_f<Tt, Ty> _check_if = nullptr;
+    const Func<Tt, Ty> _mask = nullptr;
+    int _i = 0;
+    Tt* _t_event = nullptr;
+    Ty* _q_event = nullptr;
+};
+
+
+
+
+
+template<class Tt, class Ty>
+class StopEvent{
+
+public:
+    StopEvent(const std::string& name, event_f<Tt, Ty> when, is_event_f<Tt, Ty> check_if) : _name(name), _when(when), _check_if(check_if) {}
+
+    bool is_between(const Tt& t1, const Ty& q1, const Tt& t2, const Ty& q2, const std::vector<Tt>& args)const{
+        if (_check_if == nullptr || (_check_if(t1, q1, args) && _check_if(t2, q2, args))){
+            return _when(t1, q1, args) * _when(t2, q2, args) <= 0;
+        }
+        else{
+            return false;
+        }
+    }
+
+    const std::string& name = _name;
+
+
+private:
+
+    const std::string _name;
+    const event_f<Tt, Ty> _when = nullptr;
+    const is_event_f<Tt, Ty> _check_if = nullptr;
+
+};
+
+
+template<class Tt, class Ty>
+class EventHolder{
+
+public:
+    EventHolder(const std::vector<std::string>& event_names) : events(event_names){
+        for (const std::string& name : event_names) {
+            _events_map[name] = {};
+        }
+    }
+
+    EventHolder(const std::vector<Event<Tt, Ty>>& Events){
+        events.reserve(Events.size());
+        for (const Event<Tt, Ty>& ev : Events) {
+            _events_map[ev.name] = {};
+            events.push_back(ev.name);
+        }
+    }
+
+    const std::vector<size_t>& array(const std::string& event_name) const {
+        return _events_map.at(event_name);
+    }
+
+    void include(const std::string& event_name, const size_t& i){
+        _events_map[event_name].push_back(i);
+    }
+
+    EventHolder<Tt, Ty> subHolder(const size_t& start_point){
+        EventHolder<Tt, Ty> res(events);
+        size_t index;
+        for (const std::string& name : events) {
+            res._events_map[name] = {};
+            for (size_t i=0; i<_events_map[name].size(); i++){
+                index = _events_map[name][i];
+                if (index >= start_point){
+                    res._events_map[name].push_back(index-start_point);
+                }
+            }
+        }
+        return res;
+    }
+
+    size_t population(const std::string& event_name) const{
+        return array(event_name).size();
+    }
+
+    void showEvents() const{
+        std::cout << std::endl <<
+        "Events:\n----------\n";
+        for (const std::string& name : events){
+            std::cout << "    " << name << " : " << population(name) << "\n";
+        }
+        std::cout << "\n----------\n";
+    }
+
+    std::vector<std::string> events;
+
+
+private:
+
+    std::map<std::string, std::vector<size_t>> _events_map;
+
+};
+
 
 //ODERESULT STRUCT TO ENCAPSULATE THE RESULT OF AN ODE INTEGRATION
 
@@ -124,24 +261,31 @@ public:
 
     const Container<Tt> t;
     const Container<Ty> q;
-    const std::vector<size_t> events;
-    const std::vector<size_t> transforms;
+    const EventHolder<Tt, Ty> eh;
     const bool diverges;
     const bool is_stiff;
-    const bool success;// if t_max or break condition were satisfied
+    const bool success;// if the OdeSolver didnt die during the integration
     const long double runtime;
     const std::string message;
 
     void examine() const{
         std::cout << std::endl <<
-        "Points           : " << t.size() << "\n" <<
-        "Events           : " << events.size() << "\n" <<
-        "Transformations  : " << transforms.size() << "\n"
+        "Points           : " << t.size();
+        eh.showEvents(); std::cout <<
         "Diverges         : " << (diverges ? "true" : "false") << "\n" << 
         "Stiff            : " << (is_stiff ? "true" : "false") << "\n" <<
         "Success          : " << (success ? "true" : "false") << "\n" <<
         "Runtime          : " << runtime << "\n" <<
         "Termination cause: " << message << "\n";
+    }
+
+    std::vector<size_t> full_shape() const{
+        std::vector<size_t> result;
+        std::vector<size_t> _shape = shape(q[0]);
+        result.reserve(1 + _shape.size()); // Pre-allocate memory for efficiency
+        result.push_back(t.size());        // Add the first element
+        result.insert(result.end(), _shape.begin(), _shape.end()); // Append the original vector
+        return result;
     }
     
 };
@@ -156,7 +300,7 @@ public:
     OdeResult<Tt, Ty> as_copy() const{
         return {std::vector<Tt>(this->t.begin(), this->t.end()),
                 std::vector<Ty>(this->q.begin(), this->q.end()),
-                this->events, this->transforms, this->diverges, this->is_stiff, this->success, this->runtime, this->message};
+                this->eh, this->diverges, this->is_stiff, this->success, this->runtime, this->message};
     }
 };
 
@@ -167,8 +311,7 @@ struct SolverState{
     const Tt t;
     const Ty q;
     const Tt habs;
-    const bool event;
-    const bool transform_event;
+    const std::map<std::string, bool> is_event;
     const bool diverges;
     const bool is_stiff;
     const bool is_running; //if tmax or breakcond are met or is dead, it is set to false. It can be set to true if new tmax goal is set
@@ -180,15 +323,24 @@ struct SolverState{
         std::cout << std::endl << std::setprecision(precision) <<
         "t          : " << t << "\n" <<
         "q          : " << q << "\n" <<
-        "h          : " << habs << "\n" <<
-        "Event      : " << (event ? "true" : "false") << "\n" <<
-        "Transformed: " << (transform_event ? "true" : "false") << "\n"
+        "h          : " << habs << "\n";
+        show_event_state(); std::cout <<
         "Diverges   : " << (diverges ? "true" : "false") << "\n" << 
         "Stiff      : " << (is_stiff ? "true" : "false") << "\n" <<
         "Running    : " << (is_running ? "true" : "false") << "\n" <<
         "Updates    : " << N << "\n" <<
         "Dead       : " << (is_dead ? "true" : "false") << "\n" <<
         "State      : " << message << "\n";
+    }
+
+
+    void show_event_state() const{
+        std::cout << std::endl <<
+        "Events:\n----------\n";
+        for (const auto& [name, value] : is_event) {
+            std::cout << "    " << name << ": " << ( value ? "true" : "false") << "\n";
+        }
+        std::cout << "\n----------\n";
     }
 
 };
@@ -203,10 +355,10 @@ struct State{
 };
 
 
-template<class Tt, class Ty, bool raw_ode, bool raw_event>
+template<class Tt, class Ty>
 struct SolverArgs{
 
-    const ode_t<Tt, Ty, raw_ode> f;
+    const Func<Tt, Ty> f;
     const Tt t0;
     const Tt tmax;
     const Ty q0;
@@ -215,15 +367,17 @@ struct SolverArgs{
     const Tt atol;
     const Tt h_min;
     const std::vector<Tt> args;
-    const event_t<Tt, Ty, raw_event> event;
-    const event_t<Tt, Ty, raw_event> stopevent;
-    const is_event_t<Tt, Ty, raw_event> check_event;
-    const is_event_t<Tt, Ty, raw_event> check_stop;
-    const mask<Tt, Ty> fmask;
-    const event_f<Tt, Ty> maskevent;
-    const is_event_f<Tt, Ty> check_mask;
+    const std::vector<Event<Tt, Ty>> events;
+    const std::vector<StopEvent<Tt, Ty>> stop_events;
     const Tt event_tol;
 };
+
+
+
+
+
+
+
 
 
 #endif

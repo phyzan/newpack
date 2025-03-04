@@ -4,12 +4,12 @@
 #include "odesolvers.hpp"
 
 
-template<class Tt, class Ty, bool raw_ode, bool raw_event>
-class RKClassic : public OdeSolver<Tt, Ty, raw_ode, raw_event>{
+template<class Tt, class Ty>
+class RKClassic : public OdeSolver<Tt, Ty>{
 
 public:
 
-    using OdsBase = OdeSolver<Tt, Ty, raw_ode, raw_event>;
+    using OdsBase = OdeSolver<Tt, Ty>;
 
     const int lte;
     const Tt err_exp;
@@ -51,19 +51,19 @@ public:
 
 protected:
 
-    RKClassic(const SolverArgs<Tt, Ty, raw_ode, raw_event>& S, const int& lte) : OdsBase(S), lte(lte), err_exp(Tt(-1)/lte) {}
+    RKClassic(const SolverArgs<Tt, Ty>& S, const int& lte) : OdsBase(S), lte(lte), err_exp(Tt(-1)/lte) {}
 
 };
 
 
-template<class Tt, class Ty, bool raw_ode, bool raw_event>
-class RK4 : public RKClassic<Tt, Ty, raw_ode, raw_event>{
+template<class Tt, class Ty>
+class RK4 : public RKClassic<Tt, Ty>{
     
-    using RKbase = RKClassic<Tt, Ty, raw_ode, raw_event>;
+    using RKbase = RKClassic<Tt, Ty>;
 
 public:
 
-    RK4(const SolverArgs<Tt, Ty, raw_ode, raw_event>& S) : RKbase(S, 5) {}
+    RK4(const SolverArgs<Tt, Ty>& S) : RKbase(S, 5) {}
 
     Ty step(const Tt& t_old, const Ty& q_old, const Tt& h) const override{
         Ty k1 = this->f(t_old, q_old, this->args);

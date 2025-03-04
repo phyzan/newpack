@@ -10,7 +10,7 @@
 namespace py = pybind11;
 
 template<class Tt, class Ty>
-ode_f<Tt, Ty> to_ODE_callable(const py::object f, const std::vector<size_t>& shape);
+Func<Tt, Ty> to_Func(const py::object f, const std::vector<size_t>& shape);
 
 std::vector<size_t> shape(const py::array& arr) {
     const ssize_t* shape_ptr = arr.shape();  // Pointer to shape data
@@ -49,7 +49,7 @@ struct PyOdeResult{
     }
 
     py::array_t<Tt> q() const {
-        return to_numpy<Tt>(flatten<Tt, Ty>(res_src.q));
+        return to_numpy<Tt>(flatten<Tt, Ty>(res_src.q), res_src.full_shape());
     }
 
     py::array_t<size_t> events() const {
@@ -160,7 +160,7 @@ struct PyOdeArgs{
 
     ODE<Tt, Ty, false, false> to_ODE() const {
         std::vector<size_t> s = shape(q0);
-        return ODE<Tt, Ty, false, false>(to_ODE_callable<Tt, Ty>(f, s), t0, toCPP_Array<Tt, Ty>(q0), stepsize, rtol, atol, min_step, toCPP_Array<Tt, std::vector<Tt>>(args), method.cast<std::string>(), event_tol, to_event<Tt, Ty>(event, s), to_event<Tt, Ty>(stopevent, s), to_event_check<Tt, Ty>(check_event, s), to_event_check<Tt, Ty>(check_stop, s), to_ODE_callable<Tt, Ty>(fmask, s), to_event<Tt, Ty>(maskevent, s), to_event_check<Tt, Ty>(check_mask, s));
+        return ODE<Tt, Ty, false, false>(to_Func<Tt, Ty>(f, s), t0, toCPP_Array<Tt, Ty>(q0), stepsize, rtol, atol, min_step, toCPP_Array<Tt, std::vector<Tt>>(args), method.cast<std::string>(), event_tol, to_event<Tt, Ty>(event, s), to_event<Tt, Ty>(stopevent, s), to_event_check<Tt, Ty>(check_event, s), to_event_check<Tt, Ty>(check_stop, s), to_Func<Tt, Ty>(fmask, s), to_event<Tt, Ty>(maskevent, s), to_event_check<Tt, Ty>(check_mask, s));
     }
 
 };
@@ -220,11 +220,11 @@ public:
 
 
 template<class Tt, class Ty>
-ode_f<Tt, Ty> to_ODE_callable(const py::object f, const std::vector<size_t>& shape){
+Func<Tt, Ty> to_Func(const py::object f, const std::vector<size_t>& shape){
     if (f.is_none()){
         return nullptr;
     }
-    ode_f<Tt, Ty> g = [f, shape](const Tt& t, const Ty& y, const std::vector<Tt>& args) -> Ty {
+    Func<Tt, Ty> g = [f, shape](const Tt& t, const Ty& y, const std::vector<Tt>& args) -> Ty {
         return toCPP_Array<Tt, Ty>(f(t, to_numpy<Tt>(y, shape), *to_tuple(args)));
     };
     return g;
