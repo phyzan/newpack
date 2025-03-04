@@ -7,13 +7,14 @@
 #include <limits>
 
 
-template<class Tt, class Ty, bool raw_ode, bool raw_event>
+template<class Tt, int N>
 class OdeSolver{
 
 
 public:
 
-    using Callable = ode_t<Tt, Ty, raw_ode>;
+    using Callable = Func<Tt, N>;
+    using Ty = vec<Tt, N>;
 
     //arguments below almost identical to solver args
     const Callable f;
@@ -21,13 +22,13 @@ public:
     const Tt atol;
     const Tt h_min;
     const std::vector<Tt> args;
-    const event_t<Tt, Ty, raw_event> event;
-    const event_t<Tt, Ty, raw_event> stopevent;
-    const is_event_t<Tt, Ty, raw_event> check_event;
-    const is_event_t<Tt, Ty, raw_event> check_stop;
-    const mask<Tt, Ty> fmask;
-    const event_f<Tt, Ty> maskevent;
-    const is_event_f<Tt, Ty> check_mask;
+    const event<Tt, N> eventfunc;
+    const event<Tt, N> stopevent;
+    const is_event<Tt,N> check_event;
+    const is_event<Tt, N> check_stop;
+    const Func<Tt, N> fmask;
+    const event<Tt, N> maskevent;
+    const is_event<Tt, N> check_mask;
     const Tt event_tol;
 
     const size_t n; //size of ode system
@@ -78,7 +79,7 @@ public:
     const bool& is_running() const {return _is_running;}
     const bool& is_dead() const {return _is_dead;}
     const std::string& message() {return _message;}
-    const SolverState<Tt, Ty> state() const {
+    const SolverState<Tt, N> state() const {
         return {_t, _q, _habs, _event, _transform_event, _diverges, _is_stiff, _is_running, _is_dead, _N, _message};
     }
 
@@ -87,13 +88,13 @@ public:
 
     virtual Ty step(const Tt& t_old, const Ty& q_old, const Tt& h) const = 0;
 
-    virtual State<Tt, Ty> adaptive_step() const = 0;
+    virtual State<Tt, N> adaptive_step() const = 0;
 
 
 
 protected:
 
-    OdeSolver(const SolverArgs<Tt, Ty, raw_ode, raw_event>& S): f(S.f), rtol(S.rtol), atol(S.atol), h_min(S.h_min), args(S.args), event(S.event), stopevent(S.stopevent), check_event(S.check_event), check_stop(S.check_stop), fmask(S.fmask), maskevent(S.maskevent), check_mask(S.check_mask), event_tol(S.event_tol), n(S.q0.size()), _t(S.t0), _q(S.q0), _habs(S.habs) {
+    OdeSolver(const SolverArgs<Tt, N>& S): f(S.f), rtol(S.rtol), atol(S.atol), h_min(S.h_min), args(S.args), eventfunc(S.eventfunc), stopevent(S.stopevent), check_event(S.check_event), check_stop(S.check_stop), fmask(S.fmask), maskevent(S.maskevent), check_mask(S.check_mask), event_tol(S.event_tol), n(S.q0.size()), _t(S.t0), _q(S.q0), _habs(S.habs) {
         set_goal(S.tmax);
     }
 
@@ -103,10 +104,9 @@ private:
     OdeSolver operator=(const OdeSolver&) = delete;
     OdeSolver(const OdeSolver& other) = default;
 
-    template<bool _raw>
-    bool _adapt_to_event(State<Tt, Ty>& next, const event_t<Tt, Ty, _raw>& event, const is_event_t<Tt, Ty, _raw>& check_event_condition)const;
+    bool _adapt_to_event(State<Tt, N>& next, const event<Tt, N>& event, const is_event<Tt, N>& check_event_condition)const;
 
-    bool _go_to_state(State<Tt, Ty>& next);
+    bool _go_to_state(State<Tt, N>& next);
 
     bool _update(const Tt& t_new, const Ty& y_new, const Tt& h_next);
 
@@ -122,8 +122,8 @@ private:
 ------------------------------------------------------------------------------
 */
 
-template<class Tt, class Ty, bool raw_ode, bool raw_event>
-void OdeSolver<Tt, Ty, raw_ode, raw_event>::set_goal(const Tt& t_max_new){
+template<class Tt, int N>
+void OdeSolver<Tt, N>::set_goal(const Tt& t_max_new){
     if ((_is_stiff || _diverges) && (!_is_dead || _is_running) ){
         //sanity check. 
         throw std::runtime_error("Bud detected");
@@ -145,23 +145,23 @@ void OdeSolver<Tt, Ty, raw_ode, raw_event>::set_goal(const Tt& t_max_new){
 }
 
 
-template<class Tt, class Ty, bool raw_ode, bool raw_event>
-bool OdeSolver<Tt, Ty, raw_ode, raw_event>::advance(){
-    State<Tt, Ty> next = adaptive_step();
+template<class Tt, int N>
+bool OdeSolver<Tt, N>::advance(){
+    State<Tt, N> next = adaptive_step();
     return _go_to_state(next);
 }
 
 
 
-template<class Tt, class Ty, bool raw_ode, bool raw_event>
-bool OdeSolver<Tt, Ty, raw_ode, raw_event>::advance_by(const Tt& habs){
-    Ty q_next = step(habs*direction);
+template<class Tt, int N>
+bool OdeSolver<Tt, N>::advance_by(const Tt& habs){
+    vec<Tt, N> q_next = step(habs*direction);
     return _go_to_state({_t+habs*direction, q_next, habs});
 }
 
 
-template<class Tt, class Ty, bool raw_ode, bool raw_event>
-bool OdeSolver<Tt, Ty, raw_ode, raw_event>::_update(const Tt& t_new, const Ty& y_new, const Tt& h_next){
+template<class Tt, int N>
+bool OdeSolver<Tt, N>::_update(const Tt& t_new, const vec<Tt, N>& y_new, const Tt& h_next){
     
     bool success = true;
     if (_is_dead){
@@ -209,19 +209,18 @@ bool OdeSolver<Tt, Ty, raw_ode, raw_event>::_update(const Tt& t_new, const Ty& y
     return success;
 }
 
-template<class Tt, class Ty, bool raw_ode, bool raw_event>
-template<bool _raw>
-bool OdeSolver<Tt, Ty, raw_ode, raw_event>::_adapt_to_event(State<Tt, Ty>& next, const event_t<Tt, Ty, _raw>& event, const is_event_t<Tt, Ty, _raw>& check_event_condition)const{
+template<class Tt, int N>
+bool OdeSolver<Tt, N>::_adapt_to_event(State<Tt, N>& next, const event<Tt, N>& event, const is_event<Tt, N>& check_event_condition)const{
     // takes next state (which means tnew, hnew, and hnext_new)
     // if it is not an event or smth it is left unchanged.
     // otherwise, it is modified to depict the event with high accuracy
     if ((event != nullptr) &&  (check_event_condition == nullptr || check_event_condition(next.t, next.q, args))){
         Tt t_new, h_new;
-        Ty q_new;
+        vec<Tt, N> q_new;
 
         if ( event(_t, _q, args) * event(next.t, next.q, args) <= 0 ){
             std::function<Tt(Tt)> func = [this, event](const Tt& t_next) -> Tt {
-                Ty q_next = this->step(this->_t, this->_q, t_next-this->_t);
+                vec<Tt, N> q_next = this->step(this->_t, this->_q, t_next-this->_t);
                 return event(t_next, q_next, this->args);
             };
             
@@ -240,8 +239,8 @@ bool OdeSolver<Tt, Ty, raw_ode, raw_event>::_adapt_to_event(State<Tt, Ty>& next,
     }
 }
 
-template<class Tt, class Ty, bool raw_ode, bool raw_event>
-bool OdeSolver<Tt, Ty, raw_ode, raw_event>::_go_to_state(State<Tt, Ty>& next){
+template<class Tt, int N>
+bool OdeSolver<Tt, N>::_go_to_state(State<Tt, N>& next){
 
 
     if (fmask != nullptr && maskevent == nullptr){
@@ -251,7 +250,7 @@ bool OdeSolver<Tt, Ty, raw_ode, raw_event>::_go_to_state(State<Tt, Ty>& next){
 
 
     if (_N > 0){
-        if (_adapt_to_event<raw_event>(next, stopevent, check_stop)){
+        if (_adapt_to_event(next, stopevent, check_stop)){
             bool success = _update(next.t, next.q, next.h_next);
             stop();
             _event = false;
@@ -259,12 +258,12 @@ bool OdeSolver<Tt, Ty, raw_ode, raw_event>::_go_to_state(State<Tt, Ty>& next){
             return success;
         }
 
-        if (!_transform_event && _adapt_to_event<false>(next, maskevent, check_mask)){
+        if (!_transform_event && _adapt_to_event(next, maskevent, check_mask)){
             _transform_event = true;
             _event = false;
             return _update(next.t, fmask(next.t, next.q, args), next.h_next);
         }
-        else if (_adapt_to_event<raw_event>(next, event, check_event)){
+        else if (_adapt_to_event(next, eventfunc, check_event)){
             _event = true;
             _transform_event = false;
             return _update(next.t, next.q, next.h_next);

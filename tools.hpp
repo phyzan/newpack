@@ -9,53 +9,25 @@
 
 // USEFUL ALIASES
 
-template<class Tt, size_t Nc=0, size_t Nr=1>
-using vec = std::conditional_t<(Nc == 0), Eigen::Array<Tt, Nr, -1>, Eigen::Array<Tt, Nr, Nc>>;
+template<class Tt, int N>
+using vec = Eigen::Array<Tt, 1, N>;
 
-template<class Tt, class Ty>
-using ode = Ty(*)(const Tt&, const Ty&, const std::vector<Tt>&);
+template<class Tt, int N>
+using VecArray = Eigen::Array<Tt, -1, N>;
 
-template<class Tt, class Ty>
-using ode_f = std::function<Ty(const Tt&, const Ty&, const std::vector<Tt>&)>;
+template<class Tt, int N>
+using Func = std::function<vec<Tt, N>(const Tt&, const vec<Tt, N>&, const std::vector<Tt>&)>;
 
-template<class Tt, class Ty, bool raw>
-using ode_t = std::conditional_t<(raw==true), ode<Tt, Ty>, ode_f<Tt, Ty>>;
+template<class Tt, int N>
+using event = std::function<Tt(const Tt&, const vec<Tt, N>&, const std::vector<Tt>&)>;
 
-
-
-template<class Tt, class Ty>
-using event = Tt(*)(const Tt&, const Ty&, const std::vector<Tt>&);
-
-template<class Tt, class Ty>
-using event_f = std::function<Tt(const Tt&, const Ty&, const std::vector<Tt>&)>;
-
-template<class Tt, class Ty, bool raw>
-using event_t = std::conditional_t<(raw==true), event<Tt, Ty>, event_f<Tt, Ty>>;
-
-
-template<class Tt, class Ty>
-using is_event = bool(*)(const Tt&, const Ty&, const std::vector<Tt>&);
-
-template<class Tt, class Ty>
-using is_event_f = std::function<bool(const Tt&, const Ty&, const std::vector<Tt>&)>;
-
-template<class Tt, class Ty, bool raw>
-using is_event_t = std::conditional_t<(raw==true), is_event<Tt, Ty>, is_event_f<Tt, Ty>>;
-
-
-
-template<class Tt, class Ty>
-using mask = ode_f<Tt, Ty>; //mask function is of the same form as the ode: f(t, y) -> y_new
+template<class Tt, int N>
+using is_event = std::function<bool(const Tt&, const vec<Tt, N>&, const std::vector<Tt>&)>;
 
 
 template<class T, int Nr, int Nc>
 T norm(const Eigen::Array<T, Nr, Nc>& f){
     return (f*f).sum();
-}
-
-template<class T, int Nr, int Nc>
-Eigen::Array<T, Nr, Nc> cwise_abs(const Eigen::Array<T, Nr, Nc>& f){
-    return f.cwiseAbs();
 }
 
 template<class T, int Nr, int Nc>
@@ -117,13 +89,13 @@ std::vector<T> bisect(Callable&& f, const T& a, const T& b, const T& atol){
 
 //ODERESULT STRUCT TO ENCAPSULATE THE RESULT OF AN ODE INTEGRATION
 
-template<class Tt, class Ty, template <class> class Container>
+template<class tContainer, class yContainer>
 class _OdeResult{
 
 public:
 
-    const Container<Tt> t;
-    const Container<Ty> q;
+    const tContainer t;
+    const yContainer q;
     const std::vector<size_t> events;
     const std::vector<size_t> transforms;
     const bool diverges;
@@ -146,26 +118,26 @@ public:
     
 };
 
-template<class Tt, class Ty>
-using OdeResult = _OdeResult<Tt, Ty, std::vector>;
+template<class Tt, int N>
+using OdeResult = _OdeResult<std::vector<Tt>, VecArray<Tt, N>>;
 
-template<class Tt, class Ty>
-class OdeResultReference : public _OdeResult<Tt, Ty, std::span> {
+template<class Tt, int N>
+class OdeResultReference : public _OdeResult<std::span<Tt>, Eigen::Map<VecArray<Tt, N>>> {
 
 public:
-    OdeResult<Tt, Ty> as_copy() const{
+    OdeResult<Tt, N> as_copy() const{
         return {std::vector<Tt>(this->t.begin(), this->t.end()),
-                std::vector<Ty>(this->q.begin(), this->q.end()),
+                this->q.eval(),
                 this->events, this->transforms, this->diverges, this->is_stiff, this->success, this->runtime, this->message};
     }
 };
 
 
-template<class Tt, class Ty>
+template<class Tt, int N>
 struct SolverState{
-
+    
     const Tt t;
-    const Ty q;
+    const vec<Tt, N> q;
     const Tt habs;
     const bool event;
     const bool transform_event;
@@ -173,7 +145,7 @@ struct SolverState{
     const bool is_stiff;
     const bool is_running; //if tmax or breakcond are met or is dead, it is set to false. It can be set to true if new tmax goal is set
     const bool is_dead; //e.g. if stiff or diverges. This is irreversible.
-    const size_t N;
+    const size_t Nt;
     const std::string message;
 
     void show(const int& precision = 15) const{
@@ -186,7 +158,7 @@ struct SolverState{
         "Diverges   : " << (diverges ? "true" : "false") << "\n" << 
         "Stiff      : " << (is_stiff ? "true" : "false") << "\n" <<
         "Running    : " << (is_running ? "true" : "false") << "\n" <<
-        "Updates    : " << N << "\n" <<
+        "Updates    : " << Nt << "\n" <<
         "Dead       : " << (is_dead ? "true" : "false") << "\n" <<
         "State      : " << message << "\n";
     }
@@ -194,34 +166,34 @@ struct SolverState{
 };
 
 
-template<class Tt, class Ty>
+template<class Tt, int N>
 struct State{
 
     Tt t;
-    Ty q;
+    vec<Tt, N> q;
     Tt h_next;
 };
 
 
-template<class Tt, class Ty, bool raw_ode, bool raw_event>
+template<class Tt, int N>
 struct SolverArgs{
 
-    const ode_t<Tt, Ty, raw_ode> f;
+    const Func<Tt, N> f;
     const Tt t0;
     const Tt tmax;
-    const Ty q0;
+    const vec<Tt, N> q0;
     const Tt habs;
     const Tt rtol;
     const Tt atol;
     const Tt h_min;
     const std::vector<Tt> args;
-    const event_t<Tt, Ty, raw_event> event;
-    const event_t<Tt, Ty, raw_event> stopevent;
-    const is_event_t<Tt, Ty, raw_event> check_event;
-    const is_event_t<Tt, Ty, raw_event> check_stop;
-    const mask<Tt, Ty> fmask;
-    const event_f<Tt, Ty> maskevent;
-    const is_event_f<Tt, Ty> check_mask;
+    const event<Tt, N> eventfunc;
+    const event<Tt, N> stopevent;
+    const is_event<Tt, N> check_event;
+    const is_event<Tt, N> check_stop;
+    const Func<Tt, N> fmask;
+    const event<Tt, N> maskevent;
+    const is_event<Tt, N> check_mask;
     const Tt event_tol;
 };
 

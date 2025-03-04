@@ -18,7 +18,8 @@ ode = LowLevelODE(f, 0., q0, 0.01, event_tol=0., event=event)
 
 ode.integrate(1001)
 ode.integrate(-1001)
-print(ode.q[-1])
+ode.q[:, :] = 0
+print(ode.q is ode.q)
 # while True:
 #     ode.state().show()
 #     input()
