@@ -51,13 +51,23 @@ bool All_isFinite(const Eigen::Array<T, Nr, Nc>& arr){
 
 template<class T, int Nr, int Nc>
 std::vector<size_t> shape(const Eigen::Array<T, Nr, Nc>& arr){
-    return {arr.rows(), arr.cols()};
+    return {size_t(arr.rows()), size_t(arr.cols())};
 }
 
 template<class T>
 std::vector<size_t> shape(const std::vector<T>& arr){
     return {arr.size()};
 }
+
+
+template<class T>
+std::vector<T> subvec(const std::vector<T>& x, const size_t& start) {
+    if (start >= x.size()) {
+        return {}; // Return an empty vector if start is out of bounds
+    }
+    return std::vector<T>(x.begin() + start, x.end());
+}
+
 
 //BISECTION USED FOR EVENTS IN ODES
 
@@ -90,15 +100,25 @@ std::vector<T> bisect(Callable&& f, const T& a, const T& b, const T& atol){
     return {_a, c, _b};
 }
 
+void _assert_valid_name(const std::string& name){
+    if (name == ""){
+        throw std::runtime_error("Please provide a non empty name when instanciating an Event-related class");
+    }
+}
+
 
 
 template<class Tt, class Ty>
 class Event{
 
 public:
-    Event(const std::string& name, event_f<Tt, Ty> when, is_event_f<Tt, Ty> check_if=nullptr, Func<Tt, Ty> mask=nullptr) : _name(name), _when(when), _check_if(check_if), _mask(mask) {}
+    Event(const std::string& name, event_f<Tt, Ty> when, is_event_f<Tt, Ty> check_if=nullptr, Func<Tt, Ty> mask=nullptr) : _name(name), _when(when), _check_if(check_if), _mask(mask) {
+        _assert_valid_name(name);
+    }
 
-    Event(const std::string& name, std::vector<Tt> when, is_event_f<Tt, Ty> check_if=nullptr, Func<Tt, Ty> mask=nullptr) : _name(name), _when_t(when), _check_if(check_if), _mask(mask) {}
+    Event(const std::string& name, std::vector<Tt> when, is_event_f<Tt, Ty> check_if=nullptr, Func<Tt, Ty> mask=nullptr) : _name(name), _when_t(when), _check_if(check_if), _mask(mask){
+        _assert_valid_name(name);
+    }
 
     bool determine(const Tt& t1, const Tt& t2, const std::vector<Tt>& args, std::function<Ty(const Tt&)> q, const Tt& tol){
         delete _t_event;
@@ -139,7 +159,9 @@ public:
         return *_q_event;
     }
 
-    const std::string& name = _name;
+    const std::string& name()const{
+        return _name;
+    }
 
     ~Event(){
         delete _t_event;
@@ -157,6 +179,7 @@ private:
     int _i = 0;
     Tt* _t_event = nullptr;
     Ty* _q_event = nullptr;
+
 };
 
 
@@ -167,7 +190,9 @@ template<class Tt, class Ty>
 class StopEvent{
 
 public:
-    StopEvent(const std::string& name, event_f<Tt, Ty> when, is_event_f<Tt, Ty> check_if) : _name(name), _when(when), _check_if(check_if) {}
+    StopEvent(const std::string& name, event_f<Tt, Ty> when, is_event_f<Tt, Ty> check_if=nullptr) : _name(name), _when(when), _check_if(check_if){
+        _assert_valid_name(name);
+    }
 
     bool is_between(const Tt& t1, const Ty& q1, const Tt& t2, const Ty& q2, const std::vector<Tt>& args)const{
         if (_check_if == nullptr || (_check_if(t1, q1, args) && _check_if(t2, q2, args))){
@@ -178,7 +203,9 @@ public:
         }
     }
 
-    const std::string& name = _name;
+    const std::string& name()const{
+        return _name;
+    }
 
 
 private:
@@ -192,73 +219,51 @@ private:
 
 //ODERESULT STRUCT TO ENCAPSULATE THE RESULT OF AN ODE INTEGRATION
 
-template<class Tt, class Ty, template <class> class Container>
-class _OdeResult{
+template<class Tt, class Ty>
+struct OdeResult{
 
-public:
 
-    const Container<Tt> t;
-    const Container<Ty> q;
+    const std::vector<Tt> t;
+    const std::vector<Ty> q;
     const std::map<std::string, std::vector<size_t>> events;
     const bool diverges;
     const bool is_stiff;
     const bool success;// if the OdeSolver didnt die during the integration
-    const long double runtime;
+    const double runtime;
     const std::string message;
 
     void examine() const{
-        std::cout << std::endl <<
-        "Points           : " << t.size();
-        examine_events(); std::cout <<
-        "Diverges         : " << (diverges ? "true" : "false") << "\n" << 
-        "Stiff            : " << (is_stiff ? "true" : "false") << "\n" <<
-        "Success          : " << (success ? "true" : "false") << "\n" <<
-        "Runtime          : " << runtime << "\n" <<
-        "Termination cause: " << message << "\n";
+        std::cout << std::endl << "OdeResult\n------------------------\n------------------------\n" <<
+        "\tPoints           : " << t.size() << "\n" <<
+        "\tDiverges         : " << (diverges ? "true" : "false") << "\n" << 
+        "\tStiff            : " << (is_stiff ? "true" : "false") << "\n" <<
+        "\tSuccess          : " << (success ? "true" : "false") << "\n" <<
+        "\tRuntime          : " << runtime << "\n" <<
+        "\tTermination cause: " << message << "\n" <<
+        event_log();
     }
 
-    std::vector<size_t> full_shape() const{
-        std::vector<size_t> result;
-        std::vector<size_t> _shape = shape(q[0]);
-        result.reserve(1 + _shape.size()); // Pre-allocate memory for efficiency
-        result.push_back(t.size());        // Add the first element
-        result.insert(result.end(), _shape.begin(), _shape.end()); // Append the original vector
-        return result;
-    }
-
-    void examine_events() const{
-        std::cout << std::endl <<
-        "Events:\n----------\n";
+    std::string event_log() const{
+        std::string res = "";
+        res += "\tEvents:\n\t----------\n";
         for (const auto& [name, array] : events){
-            std::cout << "    " << name << " : " << array.size() << "\n";
+            res += "\t    " + name + " : " + std::to_string(array.size()) + "\n";
         }
-        std::cout << "\n----------\n";
+        res += "\n\t----------\n";
+        return res;
     }
     
 };
 
-template<class Tt, class Ty>
-using OdeResult = _OdeResult<Tt, Ty, std::vector>;
 
 template<class Tt, class Ty>
-class OdeResultReference : public _OdeResult<Tt, Ty, std::span> {
+class SolverState{
 
 public:
-    OdeResult<Tt, Ty> as_copy() const{
-        return {std::vector<Tt>(this->t.begin(), this->t.end()),
-                std::vector<Ty>(this->q.begin(), this->q.end()),
-                this->events, this->diverges, this->is_stiff, this->success, this->runtime, this->message};
-    }
-};
-
-
-template<class Tt, class Ty>
-struct SolverState{
-
     const Tt t;
     const Ty q;
     const Tt habs;
-    const std::map<std::string, bool> is_event;
+    const std::string event;
     const bool diverges;
     const bool is_stiff;
     const bool is_running; //if tmax or breakcond are met or is dead, it is set to false. It can be set to true if new tmax goal is set
@@ -266,29 +271,26 @@ struct SolverState{
     const size_t N;
     const std::string message;
 
+    SolverState(const Tt& t, const Ty& q, const Tt& habs, const std::string& event, const bool& diverges, const bool& is_stiff, const bool& is_running, const bool& is_dead, const size_t& N, const std::string& message): t(t), q(q), habs(habs), event(event), diverges(diverges), is_stiff(is_stiff), is_running(is_running), is_dead(is_dead), N(N), message(message) {}
+
     void show(const int& precision = 15) const{
-        std::cout << std::endl << std::setprecision(precision) <<
-        "t          : " << t << "\n" <<
-        "q          : " << q << "\n" <<
-        "h          : " << habs << "\n";
-        show_event_state(); std::cout <<
-        "Diverges   : " << (diverges ? "true" : "false") << "\n" << 
-        "Stiff      : " << (is_stiff ? "true" : "false") << "\n" <<
-        "Running    : " << (is_running ? "true" : "false") << "\n" <<
-        "Updates    : " << N << "\n" <<
-        "Dead       : " << (is_dead ? "true" : "false") << "\n" <<
-        "State      : " << message << "\n";
+
+        std::cout << std::endl << std::setprecision(precision) << 
+        "OdeSolver current state:\n---------------------------\n"
+        "\tt          : " << t << "\n" <<
+        "\tq          : " << q << "\n" <<
+        "\th          : " << habs << "\n\n";
+        std::cout << ((event == "") ? "\tNo event" : "\tEvent      : " + (event) )<< "\n" <<
+        "\tDiverges   : " << (diverges ? "true" : "false") << "\n" << 
+        "\tStiff      : " << (is_stiff ? "true" : "false") << "\n" <<
+        "\tRunning    : " << (is_running ? "true" : "false") << "\n" <<
+        "\tUpdates    : " << N << "\n" <<
+        "\tDead       : " << (is_dead ? "true" : "false") << "\n" <<
+        "\tState      : " << message << "\n";
     }
 
 
-    void show_event_state() const{
-        std::cout << std::endl <<
-        "Events:\n----------\n";
-        for (const auto& [name, value] : is_event) {
-            std::cout << "    " << name << ": " << ( value ? "true" : "false") << "\n";
-        }
-        std::cout << "\n----------\n";
-    }
+
 
 };
 

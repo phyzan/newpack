@@ -51,45 +51,19 @@ public:
 
     ~ODE(){delete _solver;}
 
-    const OdeResultReference<Tt, Ty> integrate(const Tt& interval, const int& max_frames=-1, const int& max_events=-1, const bool& terminate = true, const bool& display = false);
+    const OdeResult<Tt, Ty> integrate(const Tt& interval, const int& max_frames=-1, const int& max_events=-1, const bool& terminate = true, const bool& display = false);
 
     const SolverState<Tt, Ty> state() const {return _solver->state();}
 
     SolverState<Tt, Ty> advance();
 
-    std::map<std::string, std::vector<size_t>> event_map() const{
-        std::map<std::string, std::vector<size_t>> res;
-        for (size_t i=0; i<_solver->events().size(); i++){
-            res[_solver->events()[i].name] = _Nevents[i];
-        }
-        return res;
-    }
-
-    const std::vector<Tt>& t = _t_arr;
-    const std::vector<Ty>& q = _q_arr;
-    const long double& runtime = _runtime;
-
-private:
-
-    OdeSolver<Tt, Ty>* _solver;
-    std::vector<Tt> _t_arr;
-    std::vector<Ty> _q_arr;
-    long double _runtime = 0.;
-
-    std::vector<std::vector<size_t>> _Nevents;
-
-    void _register_state(){
-        _t_arr.push_back(_solver->t);
-        _q_arr.push_back(_solver->q);
-    }
-
-    std::map<std::string, std::vector<size_t>> _sub_map(const size_t& start_point) const{
+    std::map<std::string, std::vector<size_t>> event_map(const size_t& start_point=0) const{
         std::map<std::string, std::vector<size_t>> res;
         size_t index;
         for (size_t i=0; i<_solver->events().size(); i++){
             const Event<Tt, Ty>& ev = _solver->events()[i];
-            res[ev.name] = {};
-            std::vector<size_t>& list = res[ev.name];
+            res[ev.name()] = {};
+            std::vector<size_t>& list = res[ev.name()];
             for (size_t j=0; j<_Nevents[i].size(); j++){
                 index = _Nevents[i][j];
                 if (index >= start_point){
@@ -98,6 +72,36 @@ private:
             }
         }
         return res;
+    }
+
+    bool diverges()const{
+        return _solver->diverges();
+    }
+
+    bool is_stiff()const{
+        return _solver->is_stiff();
+    }
+
+    bool is_dead() const{
+        return _solver->is_dead();
+    }
+
+    const std::vector<Tt>& t = _t_arr;
+    const std::vector<Ty>& q = _q_arr;
+    const double& runtime = _runtime;
+
+private:
+
+    OdeSolver<Tt, Ty>* _solver;
+    std::vector<Tt> _t_arr;
+    std::vector<Ty> _q_arr;
+    double _runtime = 0.;
+
+    std::vector<std::vector<size_t>> _Nevents;
+
+    void _register_state(){
+        _t_arr.push_back(_solver->t);
+        _q_arr.push_back(_solver->q);
     }
 
 };
@@ -115,7 +119,7 @@ private:
 
 
 template<class Tt, class Ty>
-const OdeResultReference<Tt, Ty> ODE<Tt, Ty>::integrate(const Tt& interval, const int& max_frames, const int& max_events, const bool& terminate, const bool& display){
+const OdeResult<Tt, Ty> ODE<Tt, Ty>::integrate(const Tt& interval, const int& max_frames, const int& max_events, const bool& terminate, const bool& display){
     
     auto t1 = std::chrono::high_resolution_clock::now();
 
@@ -152,14 +156,13 @@ const OdeResultReference<Tt, Ty> ODE<Tt, Ty>::integrate(const Tt& interval, cons
 
     auto t2 = std::chrono::high_resolution_clock::now();
     
-    std::chrono::duration<long double> rt = t2-t1;
+    std::chrono::duration<double> rt = t2-t1;
 
-    OdeResultReference<Tt, Ty> res = {std::span<Tt>(_t_arr).subspan(N), std::span<Ty>(_q_arr).subspan(N), _sub_map(N), _solver->diverges(), _solver->is_stiff(), !_solver->is_dead(), rt.count(), _solver->message()};
+    OdeResult<Tt, Ty> res = {subvec(_t_arr, N), subvec(_q_arr, N), event_map(N), _solver->diverges(), _solver->is_stiff(), !_solver->is_dead(), rt.count(), _solver->message()};
 
     _runtime += res.runtime;
     return res;
 }
-
 
 template<class Tt, class Ty>
 SolverState<Tt, Ty> ODE<Tt, Ty>::advance(){
@@ -176,6 +179,7 @@ SolverState<Tt, Ty> ODE<Tt, Ty>::advance(){
     _solver->set_goal(_solver->t);
     return _solver->state();
 }
+
 
 
 #endif

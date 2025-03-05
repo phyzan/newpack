@@ -65,15 +65,11 @@ public:
     const Tt& stepsize = _habs;
     const Tt& tmax = _tmax;
     const int& direction = _direction;
-    const std::map<std::string, bool> boolean_eventname_map()const{
-        std::map<std::string, bool> res;
-        for (const Event<Tt, Ty>& event : _events){
-            res[event.name] = (&event == _current_event);
-        }
-        return res;
-    }
     const bool at_event()const{
         return _current_event != nullptr;
+    }
+    std::string event_name() const{
+        return at_event() ? _current_event->name() : "";
     }
     const bool& diverges() const {return _diverges;}
     const bool& is_stiff() const {return _is_stiff;}
@@ -81,7 +77,7 @@ public:
     const bool& is_dead() const {return _is_dead;}
     const std::string& message() {return _message;}
     const SolverState<Tt, Ty> state() const {
-        return {_t, _q, _habs, boolean_eventname_map(), _diverges, _is_stiff, _is_running, _is_dead, _N, _message};
+        return {_t, _q, _habs, event_name(), _diverges, _is_stiff, _is_running, _is_dead, _N, _message};
     }
 
     const Event<Tt, Ty>* current_event() const{
@@ -151,7 +147,7 @@ void OdeSolver<Tt, Ty>::set_goal(const Tt& t_max_new){
     else if (t_max_new == _t){
         _direction = 0;
         _tmax = t_max_new;
-        stop("Direction not provided");
+        stop("Waiting for new Tmax");
     }
     else{
         _tmax = t_max_new;
@@ -255,7 +251,7 @@ bool OdeSolver<Tt, Ty>::_go_to_state(State<Tt, Ty>& next){
         for (const StopEvent<Tt, Ty>& _stop_ev : _stop_events){
             if (_stop_ev.is_between(this->_t, this->_q, next.t, next.q, this->args)){
                 success = _update(next.t, next.q, next.h_next);
-                stop(_stop_ev.name);
+                stop(_stop_ev.name());
                 return success;
             }
         }
@@ -276,3 +272,6 @@ bool OdeSolver<Tt, Ty>::_go_to_state(State<Tt, Ty>& next){
 
 
 #endif
+
+
+

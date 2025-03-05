@@ -10,19 +10,29 @@
 namespace py = pybind11;
 
 template<class Tt, class Ty>
-Func<Tt, Ty> to_Func(const py::object f, const std::vector<size_t>& shape);
+Func<Tt, Ty> to_Func(py::object f, const std::vector<size_t>& shape);
 
 std::vector<size_t> shape(const py::array& arr) {
     const ssize_t* shape_ptr = arr.shape();  // Pointer to shape data
     size_t ndim = arr.ndim();  // Number of dimensions
-    return std::vector<size_t>(shape_ptr, shape_ptr + ndim);
+    std::vector<size_t> res(shape_ptr, shape_ptr + ndim);
+    return res;
 }
 
 template<class Tt, class Ty>
-event_f<Tt, Ty> to_event(const py::object py_event, const std::vector<size_t>& shape);
+event_f<Tt, Ty> to_event(py::object py_event, const std::vector<size_t>& shape);
 
 template<class Tt, class Ty>
-is_event_f<Tt, Ty> to_event_check(const py::object py_event_check, const std::vector<size_t>& shape);
+is_event_f<Tt, Ty> to_event_check(py::object py_event_check, const std::vector<size_t>& shape);
+
+py::dict to_PyDict(const std::map<std::string, std::vector<size_t>>& _map) {
+    py::dict py_dict;
+    for (const auto& [key, vec] : _map) {
+        py::array_t<size_t> np_array(vec.size(), vec.data()); // Create NumPy array
+        py_dict[key.c_str()] = np_array; // Assign to dictionary
+    }
+    return py_dict;
+}
 
 template<class Tt, class Ty>
 Ty toCPP_Array(const py::array& A);
@@ -37,105 +47,15 @@ std::vector<Tt> flatten(const std::vector<Ty>&);
 template<class T>
 py::tuple to_tuple(const std::vector<T>& vec);
 
+template<class Tt, class Ty>
+std::vector<Event<Tt, Ty>> to_Events(py::object events, const std::vector<size_t>& shape);
+
+
+template<class Tt, class Ty>
+std::vector<StopEvent<Tt, Ty>> to_StopEvents(py::object events, const std::vector<size_t>& shape);
+
 
 #pragma GCC visibility push(hidden)
-template<class Tt, class Ty>
-struct PyOdeResult{
-    
-    const OdeResult<Tt, Ty> res_src;
-
-    py::array_t<Tt> t() const {
-        return to_numpy<Tt>(res_src.t);
-    }
-
-    py::array_t<Tt> q() const {
-        return to_numpy<Tt>(flatten<Tt, Ty>(res_src.q), res_src.full_shape());
-    }
-
-    py::array_t<size_t> events() const {
-        return to_numpy<size_t>(res_src.events);
-    }
-
-    py::array_t<size_t> transforms() const {
-        return to_numpy<size_t>(res_src.transforms);
-    }
-
-    bool diverges() const{
-        return res_src.diverges;
-    }
-
-    bool is_stiff() const{
-        return res_src.is_stiff;
-    }
-
-    bool success() const{
-        return res_src.success;
-    }
-
-    long double runtime() const{
-        return res_src.runtime;
-    }
-
-    py::str message() const{
-        return py::str(res_src.message);
-    }
-
-    void examine() const{
-        res_src.examine();
-    }
-
-};
-
-
-template<class Tt, class Ty>
-struct PySolverState{
-    const SolverState<Tt, Ty> ss;
-
-    const Tt t() const {
-        return ss.t;
-    }
-
-    const py::array_t<Tt> q() const {
-        return to_numpy<Tt>(ss.q);
-    }
-
-    bool event() const {
-        return ss.event;
-    }
-
-    bool transform_event() const {
-        return ss.transform_event;
-    }
-
-    bool diverges() const{
-        return ss.diverges;
-    }
-
-    bool is_stiff() const{
-        return ss.is_stiff;
-    }
-
-    bool is_running() const{
-        return ss.is_running;
-    }
-
-    bool is_dead() const{
-        return ss.is_dead;
-    }
-
-    size_t N() const{
-        return size_t(ss.N);
-    }
-
-    py::str message() const{
-        return py::str(ss.message);
-    }
-
-    void show() const{
-        ss.show();
-    }
-};
-
 
 template<class Tt, class Ty>
 struct PyOdeArgs{
@@ -150,31 +70,85 @@ struct PyOdeArgs{
     const py::tuple args;
     const py::str method;
     const Tt event_tol;
-    const py::object event;
-    const py::object stopevent;
-    const py::object check_event;
-    const py::object check_stop;
-    const py::object fmask;
-    const py::object maskevent;
-    const py::object check_mask;
-
-    ODE<Tt, Ty, false, false> to_ODE() const {
+    const py::object events;
+    const py::object stop_events;
+    
+    ODE<Tt, Ty> to_ODE() const {
         std::vector<size_t> s = shape(q0);
-        return ODE<Tt, Ty, false, false>(to_Func<Tt, Ty>(f, s), t0, toCPP_Array<Tt, Ty>(q0), stepsize, rtol, atol, min_step, toCPP_Array<Tt, std::vector<Tt>>(args), method.cast<std::string>(), event_tol, to_event<Tt, Ty>(event, s), to_event<Tt, Ty>(stopevent, s), to_event_check<Tt, Ty>(check_event, s), to_event_check<Tt, Ty>(check_stop, s), to_Func<Tt, Ty>(fmask, s), to_event<Tt, Ty>(maskevent, s), to_event_check<Tt, Ty>(check_mask, s));
+        return ODE<Tt, Ty>(to_Func<Tt, Ty>(f, s), t0, toCPP_Array<Tt, Ty>(q0), stepsize, rtol, atol, min_step, toCPP_Array<Tt, std::vector<Tt>>(args), method.cast<std::string>(), event_tol, to_Events<Tt, Ty>(events, s), to_StopEvents<Tt, Ty>(stop_events, s));
     }
 
 };
 
 
 template<class Tt, class Ty>
+struct PyEvent{
+
+    PyEvent(py::str name, py::object when, py::object check_if, py::object mask): _name(name.cast<std::string>()), py_when(when), py_check_if(check_if), py_mask(mask){}
+
+    std::string _name;
+    py::object py_when;
+    py::object py_check_if;
+    py::object py_mask;
+
+    Event<Tt, Ty> toEvent(const std::vector<size_t>& shape){
+        return Event<Tt, Ty>(_name, to_event<Tt, Ty>(py_when, shape), to_event_check<Tt, Ty>(py_check_if, shape), to_Func<Tt, Ty>(py_mask, shape));
+    }
+};
+
+
+
+template<class Tt, class Ty>
+struct PyStopEvent{
+
+    PyStopEvent(py::str name, py::object when, py::object check_if): _name(name.cast<std::string>()), py_when(when), py_check_if(check_if){}
+
+    std::string _name;
+    py::object py_when;
+    py::object py_check_if;
+
+    StopEvent<Tt, Ty> toStopEvent(const std::vector<size_t>& shape){
+        return StopEvent<Tt, Ty>(_name, to_event<Tt, Ty>(py_when, shape), to_event_check<Tt, Ty>(py_check_if, shape));
+    }
+};
+
+
+template<class Tt, class Ty>
+class PySolverState : public SolverState<Tt, Ty>{
+
+public:
+    PySolverState(const Tt& t, const Ty& q, const Tt& habs, const std::string& event, const bool& diverges, const bool& is_stiff, const bool& is_running, const bool& is_dead, const size_t& N, const std::string& message, const std::vector<size_t>& shape): SolverState<Tt, Ty>(t, q, habs, event, diverges, is_stiff, is_running, is_dead, N, message), shape(shape) {}
+
+    const std::vector<size_t> shape;
+
+};
+
+template<class Tt, class Ty>
+struct PyOdeResult{
+    OdeResult<Tt, Ty> src;
+    std::vector<size_t> shape;
+};
+
+
+template<class Tt, class Ty>
 class PyODE{
+public:
 
-private:
+    ODE<Tt, Ty> ode;
 
-    ODE<Tt, Ty, false, false> ode;
-    std::vector<size_t> _shape;
+    PyODE(py::object f, const Tt t0, const py::array q0, const Tt stepsize, const Tt rtol, const Tt atol, const Tt min_step, const py::tuple args, const py::str method, const Tt event_tol, py::object events, py::object stop_events) : ode(PyOdeArgs<Tt, Ty>{f, t0, q0, stepsize, rtol, atol, min_step, args, method, event_tol, events, stop_events}.to_ODE()), _shape(shape(q0)){}
 
-    std::vector<size_t> fullshape() {
+    PySolverState<Tt, Ty> py_state() const{
+        SolverState<Tt, Ty> s = ode.state();
+        return PySolverState<Tt, Ty>(s.t, s.q, s.habs, s.event, s.diverges, s.is_stiff, s.is_running, s.is_dead, s.N, s.message, _shape); 
+    }
+
+    PySolverState<Tt, Ty> py_advance(){
+        ode.advance();
+        return py_state();
+    }
+
+    std::vector<size_t> full_shape() const{
         std::vector<size_t> result;
         result.reserve(1 + _shape.size()); // Pre-allocate memory for efficiency
         result.push_back(ode.t.size());        // Add the first element
@@ -182,31 +156,15 @@ private:
         return result;
     }
 
-public:
-
-    PyODE(const py::object f, const Tt& t0, const py::array& q0, const Tt& stepsize, const Tt& rtol, const Tt& atol, const Tt& min_step, const py::tuple& args, const py::str& method, const Tt& event_tol, const py::object event, const py::object stopevent, const py::object check_event, const py::object check_stop, const py::object fmask, const py::object maskevent, const py::object check_mask) : ode(PyOdeArgs<Tt, Ty>{f, t0, q0, stepsize, rtol, atol, min_step, args, method, event_tol, event, stopevent, check_event, check_stop, fmask, maskevent, check_mask}.to_ODE()), _shape(shape(q0)) {}
-
-    PyODE(const PyOdeArgs<Tt, Ty>& S) : ode(S.to_ODE()) {}
-
-    const PyOdeResult<Tt, Ty> integrate(const Tt& interval, const int& max_frames=-1, const int& max_events=-1, const bool& terminate = true, const bool& display = false){
-        return {ode.integrate(interval, max_frames, max_events, terminate, display).as_copy()};
+    PyOdeResult<Tt, Ty> py_integrate(const Tt& interval, const int& max_frames, const int& max_events, const bool& terminate, const bool& display){
+        return {ode.integrate(interval, max_frames, max_events, terminate, display), full_shape()};
+        // return {this->integrate(interval, max_frames, max_events, terminate, display), full_shape()};
     }
 
-    const PySolverState<Tt, Ty> state() const {
-        return {ode.state()};
-    }
-
-    PySolverState<Tt, Ty> advance(){
-        return {ode.advance()};
-    }
-
-    const py::array_t<Tt> t(){return to_numpy<Tt>(ode.t);}
-    const py::array_t<Tt> q(){return to_numpy<Tt>(flatten<Tt, Ty>(ode.q), fullshape());}
-    const py::array_t<size_t> events(){return to_numpy<size_t>(ode.events);}
-    const py::array_t<size_t> transforms(){return to_numpy<size_t>(ode.transforms);}
-    const long double runtime(){return ode.runtime;}
-
+private:
+    const std::vector<size_t> _shape;
 };
+
 
 
 #pragma GCC visibility pop
@@ -220,10 +178,11 @@ public:
 
 
 template<class Tt, class Ty>
-Func<Tt, Ty> to_Func(const py::object f, const std::vector<size_t>& shape){
+Func<Tt, Ty> to_Func(py::object f, const std::vector<size_t>& shape){
     if (f.is_none()){
         return nullptr;
     }
+
     Func<Tt, Ty> g = [f, shape](const Tt& t, const Ty& y, const std::vector<Tt>& args) -> Ty {
         return toCPP_Array<Tt, Ty>(f(t, to_numpy<Tt>(y, shape), *to_tuple(args)));
     };
@@ -231,7 +190,7 @@ Func<Tt, Ty> to_Func(const py::object f, const std::vector<size_t>& shape){
 }
 
 template<class Tt, class Ty>
-event_f<Tt, Ty> to_event(const py::object py_event, const std::vector<size_t>& shape){
+event_f<Tt, Ty> to_event(py::object py_event, const std::vector<size_t>& shape){
     if (py_event.is_none()){
         return nullptr;
     }
@@ -242,10 +201,11 @@ event_f<Tt, Ty> to_event(const py::object py_event, const std::vector<size_t>& s
 }
 
 template<class Tt, class Ty>
-is_event_f<Tt, Ty> to_event_check(const py::object py_event_check, const std::vector<size_t>& shape){
+is_event_f<Tt, Ty> to_event_check(py::object py_event_check, const std::vector<size_t>& shape){
     if (py_event_check.is_none()){
         return nullptr;
     }
+
     is_event_f<Tt, Ty> g = [py_event_check, shape](const Tt& t, const Ty& f, const std::vector<Tt>& args) -> bool {
         return py_event_check(t, to_numpy<Tt>(f, shape), *to_tuple(args)).equal(py::bool_(true));
     };
@@ -268,10 +228,12 @@ Ty toCPP_Array(const py::array& A){
 template<class Scalar, class ArrayType>
 py::array_t<Scalar> to_numpy(const ArrayType& array, const std::vector<size_t>& _shape){
     if (_shape.size() == 0){
-        return py::array_t<Scalar>(shape(array), array.data());
+        py::array_t<Scalar> res(array.size(), array.data());
+        return res;
     }
     else{
-        return py::array_t<Scalar>(_shape, array.data());
+        py::array_t<Scalar> res(_shape, array.data());
+        return res;
     }
 }
 
@@ -298,12 +260,84 @@ py::tuple to_tuple(const std::vector<T>& arr) {
     return py_tuple;
 }
 
+template<class Tt, class Ty>
+std::vector<Event<Tt, Ty>> to_Events(py::object events, const std::vector<size_t>& shape){   
+    if (events.is_none()){
+        return {};
+    }
+    std::vector<Event<Tt, Ty>> res;
+    for (const py::handle& item : events){
+        res.push_back(item.cast<PyEvent<Tt, Ty>&>().toEvent(shape));
+    }
+    return res;
+}
+
+
+template<class Tt, class Ty>
+std::vector<StopEvent<Tt, Ty>> to_StopEvents(py::object events, const std::vector<size_t>& shape){
+
+    if (events.is_none()){
+        return {};
+    }
+    
+    std::vector<StopEvent<Tt, Ty>> res;
+    for (const py::handle& item : events){
+        res.push_back(item.cast<PyStopEvent<Tt, Ty>&>().toStopEvent(shape));
+    }
+    return res;
+}
+
 
 
 template<class Tt, class Ty>
 void define_ode_module(py::module& m) {
+    py::class_<PyEvent<Tt, Ty>>(m, "Event", py::module_local())
+        .def(py::init<py::str, py::object, py::object, py::object>(),
+            py::arg("name"),
+            py::arg("when"),
+            py::arg("check_if")=py::none(),
+            py::arg("mask")=py::none());
+
+    py::class_<PyStopEvent<Tt, Ty>>(m, "StopEvent", py::module_local())
+        .def(py::init<py::str, py::object, py::object>(),
+            py::arg("name"),
+            py::arg("when"),
+            py::arg("check_if")=py::none());
+
+    py::class_<PyOdeResult<Tt, Ty>>(m, "OdeResult", py::module_local())
+        .def_property_readonly("t", [](const PyOdeResult<Tt, Ty>& self){
+            return to_numpy<Tt>(self.src.t);
+        })
+        .def_property_readonly("q", [](const PyOdeResult<Tt, Ty>& self){
+            return to_numpy<Tt>(flatten<Tt, Ty>(self.src.q), self.shape);
+        })
+        .def_property_readonly("events", [](const PyOdeResult<Tt, Ty>& self){
+            return to_PyDict(self.src.events);
+        })
+        .def_property_readonly("diverges", [](const PyOdeResult<Tt, Ty>& self){return self.src.diverges;})
+        .def_property_readonly("is_stiff", [](const PyOdeResult<Tt, Ty>& self){return self.src.is_stiff;})
+        .def_property_readonly("success", [](const PyOdeResult<Tt, Ty>& self){return self.src.success;})
+        .def_property_readonly("runtime", [](const PyOdeResult<Tt, Ty>& self){return self.src.runtime;})
+        .def_property_readonly("message", [](const PyOdeResult<Tt, Ty>& self){return self.src.message;})
+        .def("examine", [](const PyOdeResult<Tt, Ty>& self){return self.src.examine();});
+
+
+    py::class_<PySolverState<Tt, Ty>>(m, "SolverState", py::module_local())
+        .def_property_readonly("t", [](const PySolverState<Tt, Ty>& self){return self.t;})
+        .def_property_readonly("q", [](const PySolverState<Tt, Ty>& self){return to_numpy<Tt>(self.q, self.shape);})
+        .def_property_readonly("event", [](const PySolverState<Tt, Ty>& self){return self.event;})
+        .def_property_readonly("diverges", [](const PySolverState<Tt, Ty>& self){return self.diverges;})
+        .def_property_readonly("is_stiff", [](const PySolverState<Tt, Ty>& self){return self.is_stiff;})
+        .def_property_readonly("is_running", [](const PySolverState<Tt, Ty>& self){return self.is_running;})
+        .def_property_readonly("is_dead", [](const PySolverState<Tt, Ty>& self){return self.is_dead;})
+        .def_property_readonly("N", [](const PySolverState<Tt, Ty>& self){return self.N;})
+        .def_property_readonly("message", [](const PySolverState<Tt, Ty>& self){return self.message;})
+        .def("show", [](const PySolverState<Tt, Ty>& self){return self.show();});
+
+        
+
     py::class_<PyODE<Tt, Ty>>(m, "LowLevelODE", py::module_local())
-        .def(py::init<py::object, Tt, py::array, Tt, Tt, Tt, Tt, py::tuple, py::str, Tt, py::object, py::object, py::object, py::object, py::object, py::object, py::object>(),
+        .def(py::init<py::object, Tt, py::array, Tt, Tt, Tt, Tt, py::tuple, py::str, Tt, py::object, py::object>(),
             py::arg("f"),
             py::arg("t0"),
             py::arg("q0"),
@@ -315,57 +349,30 @@ void define_ode_module(py::module& m) {
             py::arg("args")=py::tuple(),
             py::arg("method")="RK45",
             py::arg("event_tol")=1e-12,
-            py::arg("event")=py::none(),
-            py::arg("stopevent")=py::none(),
-            py::arg("check_event")=py::none(),
-            py::arg("check_stop")=py::none(),
-            py::arg("fmask")=py::none(),
-            py::arg("maskevent")=py::none(),
-            py::arg("check_mask")=py::none())
-        .def("integrate", &PyODE<Tt, Ty>::integrate,
+            py::arg("events")=py::none(),
+            py::arg("stop_events")=py::none())
+        .def("integrate", &PyODE<Tt, Ty>::py_integrate,
             py::arg("interval"),
             py::kw_only(),
             py::arg("max_frames")=-1,
             py::arg("max_events")=-1,
             py::arg("terminate")=true,
             py::arg("display")=false)
-        .def("advance", &PyODE<Tt, Ty>::advance)
-        .def("state", &PyODE<Tt, Ty>::state)
-        .def_property_readonly("t", &PyODE<Tt, Ty>::t)
-        .def_property_readonly("q", &PyODE<Tt, Ty>::q)
-        .def_property_readonly("events", &PyODE<Tt, Ty>::events)
-        .def_property_readonly("transforms", &PyODE<Tt, Ty>::transforms)
-        .def_property_readonly("runtime", &PyODE<Tt, Ty>::runtime);
+        .def("advance", &PyODE<Tt, Ty>::py_advance)
+        .def("state", &PyODE<Tt, Ty>::py_state)
+        .def_property_readonly("t", [](const PyODE<Tt, Ty>& self){return to_numpy<Tt>(self.ode.t);})
+        .def_property_readonly("q", [](const PyODE<Tt, Ty>& self){return to_numpy<Tt>(flatten<Tt, Ty>(self.ode.q), self.full_shape());})
+        .def("event_map", [](const PyODE<Tt, Ty>& self){return to_PyDict(self.ode.event_map());})
+        .def_property_readonly("runtime", [](const PyODE<Tt, Ty>& self){return self.ode.runtime;})
+        .def_property_readonly("is_stiff", [](const PyODE<Tt, Ty>& self){return self.ode.is_stiff();})
+        .def_property_readonly("diverges", [](const PyODE<Tt, Ty>& self){return self.ode.diverges();})
+        .def_property_readonly("is_dead", [](const PyODE<Tt, Ty>& self){return self.ode.is_dead();});
 
-
-    py::class_<PyOdeResult<Tt, Ty>>(m, "OdeResult", py::module_local())
-        // .def(py::init<py::array, py::array, bool, bool, double>(), py::arg("t"), py::arg("y"), py::arg("diverges"), py::arg("is_stiff"), py::arg("runtime"){})
-        .def_property_readonly("t", &PyOdeResult<Tt, Ty>::t)
-        .def_property_readonly("q", &PyOdeResult<Tt, Ty>::q)
-        .def_property_readonly("events", &PyOdeResult<Tt, Ty>::events)
-        .def_property_readonly("transforms", &PyOdeResult<Tt, Ty>::transforms)
-        .def_property_readonly("diverges", &PyOdeResult<Tt, Ty>::diverges)
-        .def_property_readonly("is_stiff", &PyOdeResult<Tt, Ty>::is_stiff)
-        .def_property_readonly("success", &PyOdeResult<Tt, Ty>::success)
-        .def_property_readonly("runtime", &PyOdeResult<Tt, Ty>::runtime)
-        .def_property_readonly("message", &PyOdeResult<Tt, Ty>::message)
-        .def("examine", &PyOdeResult<Tt, Ty>::examine);
-
-    py::class_<PySolverState<Tt, Ty>>(m, "SolverState", py::module_local())
-    .def_property_readonly("t", &PySolverState<Tt, Ty>::t)
-    .def_property_readonly("q", &PySolverState<Tt, Ty>::q)
-    .def_property_readonly("is_event", &PySolverState<Tt, Ty>::event)
-    .def_property_readonly("is_transform_event", &PySolverState<Tt, Ty>::transform_event)
-    .def_property_readonly("diverges", &PySolverState<Tt, Ty>::diverges)
-    .def_property_readonly("is_stiff", &PySolverState<Tt, Ty>::is_stiff)
-    .def_property_readonly("is_running", &PySolverState<Tt, Ty>::is_running)
-    .def_property_readonly("is_dead", &PySolverState<Tt, Ty>::is_dead)
-    .def_property_readonly("N", &PySolverState<Tt, Ty>::N)
-    .def_property_readonly("message", &PySolverState<Tt, Ty>::message)
-    .def("show", &PySolverState<Tt, Ty>::show);
 }
 
 
 //g++ -O3 -Wall -shared -std=c++20 -fopenmp -I/usr/include/python3.12 -I/usr/include/pybind11 -fPIC $(python3 -m pybind11 --includes) PyODE.cpp -o _integrate$(python3-config --extension-suffix)
+
+//g++ -O3 -Wall -shared -std=c++20 -fopenmp -fPIC $(python3 -m pybind11 --includes) pyode.cpp -o _integrate$(python3-config --extension-suffix)
 
 #endif
