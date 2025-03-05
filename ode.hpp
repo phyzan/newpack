@@ -36,14 +36,15 @@ class ODE{
 
 public:
 
-    ODE(const Func<Tt, Ty> f, const Tt t0, const Ty q0, const Tt stepsize, const Tt rtol, const Tt atol, const Tt min_step, const std::vector<Tt> args = {}, const std::string& method = "RK45", const Tt event_tol = 1e-10, const std::vector<Event<Tt, Ty>>& events = {}, const std::vector<StopEvent<Tt, Ty>>& stop_events = {}) : _event_holder(events) {
+    ODE(const Func<Tt, Ty> f, const Tt t0, const Ty q0, const Tt stepsize, const Tt rtol, const Tt atol, const Tt min_step, const std::vector<Tt> args = {}, const std::string& method = "RK45", const Tt event_tol = 1e-10, const std::vector<Event<Tt, Ty>>& events = {}, const std::vector<StopEvent<Tt, Ty>>& stop_events = {}) : _Nevents(events.size()) {
 
         const SolverArgs<Tt, Ty> S = {f, t0, t0, q0, stepsize, rtol, atol, min_step, args, events, stop_events, event_tol};
         _solver = getSolver(S, method);
+
         _register_state();
     }
 
-    ODE(const SolverArgs<Tt, Ty>& S, const std::string& method) : _event_holder(S.events){
+    ODE(const SolverArgs<Tt, Ty>& S, const std::string& method) : _Nevents(S.events.size()){
         _solver = getSolver(S, method);
         _register_state();
     }
@@ -56,22 +57,49 @@ public:
 
     SolverState<Tt, Ty> advance();
 
+    std::map<std::string, std::vector<size_t>> event_map() const{
+        std::map<std::string, std::vector<size_t>> res;
+        for (size_t i=0; i<_solver->events().size(); i++){
+            res[_solver->events()[i].name] = _Nevents[i];
+        }
+        return res;
+    }
+
     const std::vector<Tt>& t = _t_arr;
     const std::vector<Ty>& q = _q_arr;
     const long double& runtime = _runtime;
 
 private:
 
-    EventHolder<Tt, Ty> _event_holder;
     OdeSolver<Tt, Ty>* _solver;
     std::vector<Tt> _t_arr;
     std::vector<Ty> _q_arr;
     long double _runtime = 0.;
 
+    std::vector<std::vector<size_t>> _Nevents;
+
     void _register_state(){
         _t_arr.push_back(_solver->t);
         _q_arr.push_back(_solver->q);
     }
+
+    std::map<std::string, std::vector<size_t>> _sub_map(const size_t& start_point) const{
+        std::map<std::string, std::vector<size_t>> res;
+        size_t index;
+        for (size_t i=0; i<_solver->events().size(); i++){
+            const Event<Tt, Ty>& ev = _solver->events()[i];
+            res[ev.name] = {};
+            std::vector<size_t>& list = res[ev.name];
+            for (size_t j=0; j<_Nevents[i].size(); j++){
+                index = _Nevents[i][j];
+                if (index >= start_point){
+                    list.push_back(index-start_point);
+                }
+            }
+        }
+        return res;
+    }
+
 };
 
 
@@ -107,7 +135,7 @@ const OdeResultReference<Tt, Ty> ODE<Tt, Ty>::integrate(const Tt& interval, cons
         if (_solver->advance()){
 
             if ((event_counter != max_events) && _solver->at_event()){
-                _event_holder.include(*(_solver->current_event()), _t_arr.size());
+                _Nevents[_solver->current_event_index()].push_back(_t_arr.size());
                 if ( (++event_counter == max_events) && terminate){
                     _solver->stop("Max events reached");
                 }
@@ -126,7 +154,7 @@ const OdeResultReference<Tt, Ty> ODE<Tt, Ty>::integrate(const Tt& interval, cons
     
     std::chrono::duration<long double> rt = t2-t1;
 
-    OdeResultReference<Tt, Ty> res = {std::span<Tt>(_t_arr).subspan(N), std::span<Ty>(_q_arr).subspan(N), _event_holder.subHolder(N), _solver->diverges(), _solver->is_stiff(), !_solver->is_dead(), rt.count(), _solver->message()};
+    OdeResultReference<Tt, Ty> res = {std::span<Tt>(_t_arr).subspan(N), std::span<Ty>(_q_arr).subspan(N), _sub_map(N), _solver->diverges(), _solver->is_stiff(), !_solver->is_dead(), rt.count(), _solver->message()};
 
     _runtime += res.runtime;
     return res;
@@ -140,7 +168,7 @@ SolverState<Tt, Ty> ODE<Tt, Ty>::advance(){
     }
     if (_solver->advance()){
         if (_solver->current_event() != nullptr){
-            _event_holder.include(*_solver->current_event(), _t_arr.size());
+            _Nevents[_solver->current_event_index()].push_back(_t_arr.size());
         }
         _register_state();
     }

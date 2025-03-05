@@ -42,10 +42,10 @@ private:
     size_t _N=0;//total number of solution updates
     std::string _message = "Alive"; //different from "running".
     int _direction;
-    std::map<std::string, bool> _is_event;
-    std::vector<Event<Tt, Ty>> _events;
     const std::vector<StopEvent<Tt, Ty>> _stop_events;
-    const std::string* _current_event_name = nullptr;
+    std::vector<Event<Tt, Ty>> _events; //we make a copy of the provided vector
+    const Event<Tt, Ty>* _current_event = nullptr;
+    int _current_event_index = -1;
 
 
 public:
@@ -65,9 +65,15 @@ public:
     const Tt& stepsize = _habs;
     const Tt& tmax = _tmax;
     const int& direction = _direction;
-    const bool& at_event(const std::string& name) const {return _is_event.at(name);}
+    const std::map<std::string, bool> boolean_eventname_map()const{
+        std::map<std::string, bool> res;
+        for (const Event<Tt, Ty>& event : _events){
+            res[event.name] = (&event == _current_event);
+        }
+        return res;
+    }
     const bool at_event()const{
-        return _current_event_name != nullptr;
+        return _current_event != nullptr;
     }
     const bool& diverges() const {return _diverges;}
     const bool& is_stiff() const {return _is_stiff;}
@@ -75,14 +81,21 @@ public:
     const bool& is_dead() const {return _is_dead;}
     const std::string& message() {return _message;}
     const SolverState<Tt, Ty> state() const {
-        return {_t, _q, _habs, _is_event, _diverges, _is_stiff, _is_running, _is_dead, _N, _message};
-    }
-    const std::vector<Event<Tt, Ty>>& events()const{
-        return _events;
+        return {_t, _q, _habs, boolean_eventname_map(), _diverges, _is_stiff, _is_running, _is_dead, _N, _message};
     }
 
-    const std::string* current_event()const{
-        return _current_event_name;
+    const Event<Tt, Ty>* current_event() const{
+        //we need pointer and not reference, because it might be null
+        return _current_event;
+    }
+
+    const int& current_event_index() const{
+        //we need pointer and not reference, because it might be null
+        return _current_event_index;
+    }
+
+    const std::vector<Event<Tt, Ty>>& events() const{
+        return _events;
     }
 
 
@@ -97,11 +110,8 @@ public:
 
 protected:
 
-    OdeSolver(const SolverArgs<Tt, Ty>& S): f(S.f), rtol(S.rtol), atol(S.atol), h_min(S.h_min), args(S.args), event_tol(S.event_tol), n(S.q0.size()), _t(S.t0), _q(S.q0), _habs(S.habs), _events(S.events), _stop_events(S.stop_events) {
+    OdeSolver(const SolverArgs<Tt, Ty>& S): f(S.f), rtol(S.rtol), atol(S.atol), h_min(S.h_min), args(S.args), event_tol(S.event_tol), n(S.q0.size()), _t(S.t0), _q(S.q0), _habs(S.habs), _stop_events(S.stop_events), _events(S.events) {
         set_goal(S.tmax);
-        for (const Event<Tt, Ty>& event : _events){
-            _is_event[event.name] = false;
-        }
     }
 
 
@@ -237,8 +247,10 @@ template<class Tt, class Ty>
 bool OdeSolver<Tt, Ty>::_go_to_state(State<Tt, Ty>& next){
 
     if (_N > 0){
-        _current_event_name = nullptr;
+        _current_event = nullptr;
+        _current_event_index = -1;
         bool success;
+        int k = 0;
 
         for (const StopEvent<Tt, Ty>& _stop_ev : _stop_events){
             if (_stop_ev.is_between(this->_t, this->_q, next.t, next.q, this->args)){
@@ -247,26 +259,15 @@ bool OdeSolver<Tt, Ty>::_go_to_state(State<Tt, Ty>& next){
                 return success;
             }
         }
-        bool event_found = false;
-        for (Event<Tt, Ty>& _ev : _events){
-            if (!event_found){
-                if (_adapt_to_event(next, _ev)){
-                    _is_event[_ev.name] = true;
-                    event_found = true;
-                    success = _update(_ev.t_event(), _ev.q_event(), next.h_next);
-                    _current_event_name = &_ev.name;
-                }
-                else{
-                    _is_event[_ev.name] = false;
-                }
-            }
-            else{
-                _is_event[_ev.name] = false;
-            }
-        }
 
-        if (event_found){
-            return success;
+        for (Event<Tt, Ty>& ev : _events){
+            if (_adapt_to_event(next, ev)){
+                success = _update(ev.t_event(), ev.q_event(), next.h_next);
+                _current_event = &ev;
+                _current_event_index = k;
+                return success;
+            }
+            k++;
         }
     }
     return _update(next.t, next.q, next.h_next);

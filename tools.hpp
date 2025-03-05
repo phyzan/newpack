@@ -90,6 +90,8 @@ std::vector<T> bisect(Callable&& f, const T& a, const T& b, const T& atol){
     return {_a, c, _b};
 }
 
+
+
 template<class Tt, class Ty>
 class Event{
 
@@ -188,70 +190,6 @@ private:
 };
 
 
-template<class Tt, class Ty>
-class EventHolder{
-
-public:
-    EventHolder(const std::vector<std::string>& event_names) : events(event_names){
-        for (const std::string& name : event_names) {
-            _events_map[name] = {};
-        }
-    }
-
-    EventHolder(const std::vector<Event<Tt, Ty>>& Events){
-        events.reserve(Events.size());
-        for (const Event<Tt, Ty>& ev : Events) {
-            _events_map[ev.name] = {};
-            events.push_back(ev.name);
-        }
-    }
-
-    const std::vector<size_t>& array(const std::string& event_name) const {
-        return _events_map.at(event_name);
-    }
-
-    void include(const std::string& event_name, const size_t& i){
-        _events_map[event_name].push_back(i);
-    }
-
-    EventHolder<Tt, Ty> subHolder(const size_t& start_point){
-        EventHolder<Tt, Ty> res(events);
-        size_t index;
-        for (const std::string& name : events) {
-            res._events_map[name] = {};
-            for (size_t i=0; i<_events_map[name].size(); i++){
-                index = _events_map[name][i];
-                if (index >= start_point){
-                    res._events_map[name].push_back(index-start_point);
-                }
-            }
-        }
-        return res;
-    }
-
-    size_t population(const std::string& event_name) const{
-        return array(event_name).size();
-    }
-
-    void showEvents() const{
-        std::cout << std::endl <<
-        "Events:\n----------\n";
-        for (const std::string& name : events){
-            std::cout << "    " << name << " : " << population(name) << "\n";
-        }
-        std::cout << "\n----------\n";
-    }
-
-    std::vector<std::string> events;
-
-
-private:
-
-    std::map<std::string, std::vector<size_t>> _events_map;
-
-};
-
-
 //ODERESULT STRUCT TO ENCAPSULATE THE RESULT OF AN ODE INTEGRATION
 
 template<class Tt, class Ty, template <class> class Container>
@@ -261,7 +199,7 @@ public:
 
     const Container<Tt> t;
     const Container<Ty> q;
-    const EventHolder<Tt, Ty> eh;
+    const std::map<std::string, std::vector<size_t>> events;
     const bool diverges;
     const bool is_stiff;
     const bool success;// if the OdeSolver didnt die during the integration
@@ -271,7 +209,7 @@ public:
     void examine() const{
         std::cout << std::endl <<
         "Points           : " << t.size();
-        eh.showEvents(); std::cout <<
+        examine_events(); std::cout <<
         "Diverges         : " << (diverges ? "true" : "false") << "\n" << 
         "Stiff            : " << (is_stiff ? "true" : "false") << "\n" <<
         "Success          : " << (success ? "true" : "false") << "\n" <<
@@ -287,6 +225,15 @@ public:
         result.insert(result.end(), _shape.begin(), _shape.end()); // Append the original vector
         return result;
     }
+
+    void examine_events() const{
+        std::cout << std::endl <<
+        "Events:\n----------\n";
+        for (const auto& [name, array] : events){
+            std::cout << "    " << name << " : " << array.size() << "\n";
+        }
+        std::cout << "\n----------\n";
+    }
     
 };
 
@@ -300,7 +247,7 @@ public:
     OdeResult<Tt, Ty> as_copy() const{
         return {std::vector<Tt>(this->t.begin(), this->t.end()),
                 std::vector<Ty>(this->q.begin(), this->q.end()),
-                this->eh, this->diverges, this->is_stiff, this->success, this->runtime, this->message};
+                this->events, this->diverges, this->is_stiff, this->success, this->runtime, this->message};
     }
 };
 
