@@ -12,12 +12,7 @@ namespace py = pybind11;
 template<class Tt, class Ty>
 Func<Tt, Ty> to_Func(py::object f, const std::vector<size_t>& shape);
 
-std::vector<size_t> shape(const py::array& arr) {
-    const ssize_t* shape_ptr = arr.shape();  // Pointer to shape data
-    size_t ndim = arr.ndim();  // Number of dimensions
-    std::vector<size_t> res(shape_ptr, shape_ptr + ndim);
-    return res;
-}
+std::vector<size_t> shape(const py::array& arr);
 
 template<class Tt, class Ty>
 event_f<Tt, Ty> to_event(py::object py_event, const std::vector<size_t>& shape);
@@ -25,14 +20,7 @@ event_f<Tt, Ty> to_event(py::object py_event, const std::vector<size_t>& shape);
 template<class Tt, class Ty>
 is_event_f<Tt, Ty> to_event_check(py::object py_event_check, const std::vector<size_t>& shape);
 
-py::dict to_PyDict(const std::map<std::string, std::vector<size_t>>& _map) {
-    py::dict py_dict;
-    for (const auto& [key, vec] : _map) {
-        py::array_t<size_t> np_array(vec.size(), vec.data()); // Create NumPy array
-        py_dict[key.c_str()] = np_array; // Assign to dictionary
-    }
-    return py_dict;
-}
+py::dict to_PyDict(const std::map<std::string, std::vector<size_t>>& _map);
 
 template<class Tt, class Ty>
 Ty toCPP_Array(const py::array& A);
@@ -225,6 +213,22 @@ Ty toCPP_Array(const py::array& A){
     return res;
 }
 
+std::vector<size_t> shape(const py::array& arr) {
+    const ssize_t* shape_ptr = arr.shape();  // Pointer to shape data
+    size_t ndim = arr.ndim();  // Number of dimensions
+    std::vector<size_t> res(shape_ptr, shape_ptr + ndim);
+    return res;
+}
+
+py::dict to_PyDict(const std::map<std::string, std::vector<size_t>>& _map){
+    py::dict py_dict;
+    for (const auto& [key, vec] : _map) {
+        py::array_t<size_t> np_array(vec.size(), vec.data()); // Create NumPy array
+        py_dict[key.c_str()] = np_array; // Assign to dictionary
+    }
+    return py_dict;
+}
+
 template<class Scalar, class ArrayType>
 py::array_t<Scalar> to_numpy(const ArrayType& array, const std::vector<size_t>& _shape){
     if (_shape.size() == 0){
@@ -370,9 +374,5 @@ void define_ode_module(py::module& m) {
 
 }
 
-
-//g++ -O3 -Wall -shared -std=c++20 -fopenmp -I/usr/include/python3.12 -I/usr/include/pybind11 -fPIC $(python3 -m pybind11 --includes) PyODE.cpp -o _integrate$(python3-config --extension-suffix)
-
-//g++ -O3 -Wall -shared -std=c++20 -fopenmp -fPIC $(python3 -m pybind11 --includes) pyode.cpp -o _integrate$(python3-config --extension-suffix)
 
 #endif
